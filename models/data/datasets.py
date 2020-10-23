@@ -6,7 +6,7 @@ from os.path import *
 import numpy as np
 
 from glob import glob
-from .utils import frame_utils
+from utils import frame_utils
 
 from imageio import imread
 
@@ -137,3 +137,119 @@ class MpiSintelFinal(MpiSintel):
     def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
         super().__init__(is_cropped=is_cropped, is_rescaled=is_rescaled, crop_size=crop_size, root=root, dstype='final', replicates=replicates)
     
+class FlyingChairs(Dataset):
+    def __init__(self, is_cropped, is_rescaled=False, crop_size=None, root='', replicates=1):
+        self.is_cropped = is_cropped
+        if self.is_cropped:
+            if not crop_size:
+                raise ValueError('crop_size should be given.')
+            self.crop_size = crop_size
+        self.replicates = replicates
+
+        images = sorted( glob( join(root, '*.ppm') ) )
+
+        self.flow_list = sorted( glob( join(root, '*.flo') ) )
+
+        assert (len(images)//2 == len(self.flow_list)) 
+        
+        self.image_list = []
+        for i in range(len(self.flow_list)):
+            im1 = images[2*i]
+            im2 = images[2*i + 1]
+            self.image_list += [ [ im1, im2 ] ]
+
+        assert len(self.image_list) == len(self.flow_list), 'The number of image pairs should be equal to the number of optical flow'
+
+        self.size = len(self.image_list)
+
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            flow = frame_utils.read_gen(self.flow_list[index])
+
+            images = [img1, img2]
+            image_size = img1.shape[:2]
+            if self.is_cropped:
+                cropper = StaticRandomCrop(image_size, self.crop_size)
+            else:
+                cropper = StaticCenterCrop(image_size, self.render_size)
+            images = list(map(cropper, images))
+            flow = cropper(flow)
+            
+            # rescale image range from [0, 255] to [0, 1]
+            if self.is_rescaled:
+                rescale = RescaleTransform()
+                images = list(map(rescale, images))
+
+            images = np.array(images).transpose(3,0,1,2)
+            flow = flow.transpose(2,0,1)
+
+            images = torch.from_numpy(images.astype(np.float32))
+            flow = torch.from_numpy(flow.astype(np.float32))
+
+            return images, flow
+
+    def __len__(self):
+        return self.size * self.replicates 
+    
+class ImagesFromFolder(Dataset):
+    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', iext='png', replicates=1):
+        self.is_cropped = is_cropped
+        self.is_rescaled = is_rescaled
+        if self.is_cropped:
+            if not crop_size:
+                raise ValueError('crop_size should be given.')
+            self.crop_size = crop_size
+        self.replicates = replicates
+
+        images = sorted(glob(join(root, '*.' + iext)))
+        self.image_list = []
+        for i in range(len(images)-1):
+            im1 = images[i]
+            im2 = images[i+1]
+            self.image_list.append([ im1, im2 ])
+
+        self.size = len(self.image_list)
+
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            images = [img1, img2]
+            image_size = img1.shape[:2]
+            if self.is_cropped:
+                cropper = StaticRandomCrop(image_size, self.crop_size)
+            else:
+                cropper = StaticCenterCrop(image_size, self.render_size)
+            images = list(map(cropper, images))
+
+            images = np.array(images).transpose(3,0,1,2)
+            images = torch.from_numpy(images.astype(np.float32))
+
+            return images
+
+    def __len__(self):
+        return self.size * self.replicates
