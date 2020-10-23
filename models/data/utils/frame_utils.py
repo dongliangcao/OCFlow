@@ -1,7 +1,7 @@
 import numpy as np
 from os.path import *
 from imageio import imread
-import flow_utils
+from .flow_utils import read_flow
 
 def read_gen(filename: str):
     """
@@ -21,7 +21,7 @@ def read_gen(filename: str):
     elif ext == '.bin' or ext == '.raw':
         return np.load(filename)
     elif ext == '.flo':
-        return flow_utils.read_flow(filename).astype(np.float32)
+        return read_flow(filename).astype(np.float32)
     else:
         raise ValueError(f'.{ext} is not supported')
     
