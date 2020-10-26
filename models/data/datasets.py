@@ -138,8 +138,9 @@ class MpiSintelFinal(MpiSintel):
         super().__init__(is_cropped=is_cropped, is_rescaled=is_rescaled, crop_size=crop_size, root=root, dstype='final', replicates=replicates)
     
 class FlyingChairs(Dataset):
-    def __init__(self, is_cropped, is_rescaled=False, crop_size=None, root='', replicates=1):
+    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
         self.is_cropped = is_cropped
+        self.is_rescaled = is_rescaled
         if self.is_cropped:
             if not crop_size:
                 raise ValueError('crop_size should be given.')
