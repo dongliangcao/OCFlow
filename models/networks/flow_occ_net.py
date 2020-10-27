@@ -4,7 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class OpticalFlowEstimator(nn.Module): 
+    """
+    Network for predicting optical flow from cost volumes of masked, warped feature of second frame and feature of first frame. 
+    """
     def __init__(self, input_channels, level, highest_resolution = False):
+        super(OpticalFlowEstimator, self).__init__()
         self.highest_res = highest_resolution
         self.conv1 = nn.Conv2d(input_channels, 128, 3, 1, 1)
         self.conv2 = nn.Conv2d(128, 128, 3, 1, 1)
