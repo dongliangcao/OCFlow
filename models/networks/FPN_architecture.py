@@ -47,9 +47,9 @@ class Network(nn.Module):
                 warping_layer = Warping() #feat2 has size BxCxHxW
                 warped2 = warping_layer(feat2, flow_displacement)
             if self.occlusion:
-                occ_inputs = torch.cat([feat1, warped2], axis=1)
+                occ_inputs = torch.cat([feat1, warped2], dim=1)
                 if not first_iteration:  # all but the first iteration
-                    occ_inputs = torch.cat([occ_inputs, occ_features_up.pop(0), occ_mask_up.pop(0)], axis=1)
+                    occ_inputs = torch.cat([occ_inputs, occ_features_up.pop(0), occ_mask_up.pop(0)], dim=1)
                 if last_iteration:
                     occ_mask = self.occlusion_estimators[i](occ_inputs)
                 else:
