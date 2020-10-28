@@ -60,11 +60,20 @@ class OcclusionEstimator(nn.Module):
             occ_mask_up = F.sigmoid(upconv2(occ_mask))
             return (occ_mask, features_up, occ_mask_up)
 class CostVolumeLayer(nn.Module):
-
+    """
+    Calculate the cost volume between the warped feature and the reference feature 
+    """
     def __init__(self, search_range=4):
         super(CostVolumeLayer, self).__init__()
         self.window = search_range
     def forward(self,x, warped): 
+        """
+        Args: 
+        x: input feature, torch.Tensor [B, C, H, W]
+        warped: warped feature, torch.Tensor[B,C,H,W]
+        Returns: 
+        stacked: cost volume tensor, torch.Tensor [B, (search_range*2+1)**2, H, W] 
+        """
         total = []
         keys = []
 

@@ -87,7 +87,7 @@ class FeaturePyramidNet(nn.Module):
         p3 = self.upsample3(p4, c3)
         p2 = self.upsample2(p3, c2)
         
-        return p2, p3, p4, p5, p6
+        return [p6, p5, p4, p3, p2]
       
     
     
