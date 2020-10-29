@@ -15,12 +15,12 @@ class OpticalFlowEstimator(nn.Module):
         self.conv3 = nn.Conv2d(128, 96, 3, 1, 1)
         self.conv4 = nn.Conv2d(96, 64, 3, 1, 1)
         self.conv5 = nn.Conv2d(64, 32, 3, 1, 1)
-        self.conv6 = nn.Conv2d(32,4, 3, 1, 1)
+        self.conv6 = nn.Conv2d(32,2, 3, 1, 1)
 
-        self.upconv1 = nn.ConvTranspose2d(4, 4, 4, 2, 1)
-        self.upconv2 = nn.ConvTranspose2d(4, 4, 4, 2, 1)
+        self.upconv1 = nn.ConvTranspose2d(2, 2, 3, 2, 1)
+        self.upconv2 = nn.ConvTranspose2d(32, 2, 3, 2, 1)
 
-    def forward(self, x): 
+    def forward(self, x, h_up =None, w_up = None): 
         c1 = F.leaky_relu(self.conv1(x), negative_slope= 0.1)
         c2 = F.leaky_relu(self.conv2(c1), negative_slope= 0.1)
         c3 = F.leaky_relu(self.conv3(c2), negative_slope= 0.1)
@@ -30,8 +30,8 @@ class OpticalFlowEstimator(nn.Module):
         if self.highest_res: 
             return (f_lev, w_lev)
         else: 
-            flow_up = self.upconv1(w_lev)
-            feature_up = self.upconv2(f_lev)
+            flow_up = self.upconv1(w_lev, output_size = (h_up, w_up)) #(2,6,20)
+            feature_up = self.upconv2(f_lev, output_size = (h_up, w_up))
             return(w_lev, flow_up, feature_up)
 class OcclusionEstimator(nn.Module): 
     def __init__(self, input_channels, level, highest_resolution = False):
@@ -44,20 +44,20 @@ class OcclusionEstimator(nn.Module):
         self.feat_layer = nn.Conv2d(32, 16, 3, 1, 1)
         self.mask_layer = nn.Conv2d(16, 1, 3, 1, 1)
 
-        self.upconv1 = nn.ConvTranspose2d(16, 1, 4, 2, 1)
-        self.upconv2 = nn.ConvTranspose2d(1, 1, 4, 2, 1)
-    def forward(self, features):
+        self.upconv1 = nn.ConvTranspose2d(16, 1, 3, 2, 1)
+        self.upconv2 = nn.ConvTranspose2d(1, 1, 3, 2, 1)
+    def forward(self, features, h_up =None, w_up = None):
         c1 = F.leaky_relu(self.conv1(features), negative_slope= 0.1)
         c2 = F.leaky_relu(self.conv2(c1), negative_slope= 0.1)
         c3 = F.leaky_relu(self.conv3(c2), negative_slope= 0.1)
         c4 = F.leaky_relu(self.conv4(c3), negative_slope= 0.1)
         feat = F.leaky_relu(self.feat_layer(c4), negative_slope= 0.1)
-        occ_mask = F.sigmoid(self.mask_layer(feat))
+        occ_mask = torch.sigmoid(self.mask_layer(feat))
         if self.highest_res: 
             return occ_mask
         else: 
-            features_up = F.sigmoid(upconv1(feat))
-            occ_mask_up = F.sigmoid(upconv2(occ_mask))
+            features_up = torch.sigmoid(self.upconv1(feat, output_size = (h_up, w_up)))
+            occ_mask_up = torch.sigmoid(self.upconv2(occ_mask, output_size =(h_up, w_up)))
             return (occ_mask, features_up, occ_mask_up)
 class CostVolumeLayer(nn.Module):
     """
@@ -83,7 +83,7 @@ class CostVolumeLayer(nn.Module):
             if i != 0:
                 row_shifted = [F.pad(row_shifted[0], (0,0,0,1)), F.pad(row_shifted[1], (0,0,1,0))]
 
-                row_shifted = [row_shifted[0][:, :, :-1, :], row_shifted[1][:, :, 1:, :]]
+                row_shifted = [row_shifted[0][:, :, 1:, :], row_shifted[1][:, :, :-1, :]]
 
             for side in range(len(row_shifted)):
                 total.append(torch.mean(row_shifted[side] * x, dim = 1))

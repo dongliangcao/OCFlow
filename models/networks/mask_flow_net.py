@@ -5,7 +5,7 @@ from models.networks.warping_layer import Warping
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-class Network(nn.Module):
+class MaskFlowNet(nn.Module):
     def __init__(self, occlusion = True, mean_pixel = None):
         super().__init__()
         self.occlusion = occlusion
@@ -14,17 +14,18 @@ class Network(nn.Module):
             self.mean_pixel =  mean_pixel
         self.correlation_layer = CostVolumeLayer()
         self.feature_pyramid_network = FeaturePyramidNet()
-        self.sceneflow_estimators = []
-        for (d, l) in zip([367, 307, 275, 243, 211], [6, 5, 4, 3, 2]):
-            self.sceneflow_estimators.append(OpticalFlowEstimator(d, level=l, highest_resolution=(l==2)))
-        self.context_network = ContextNetwork(36)
+        self.opticalflow_estimators = nn.ModuleList()
+        for (d, l) in zip([277, 213, 181, 149, 117], [6, 5, 4, 3, 2]):
+            self.opticalflow_estimators.append(OpticalFlowEstimator(d, level=l, highest_resolution=(l==2)))
+        self.context_network = ContextNetwork(34)
         if occlusion:
-            self.occlusion_estimators = []
+            self.occlusion_estimators = nn.ModuleList()
             for (d, l) in zip([392, 258, 194, 130, 66], [6, 5, 4, 3, 2]):
                 self.occlusion_estimators.append(OcclusionEstimator(d, level=l, highest_resolution=(l==2)))
-    def call(self, inputs, training=False, mask=None):
-        im1 = inputs[0]
-        im2 = inputs[1]
+        
+    def forward(self, inputs, training=False, mask=None):
+        im1 = inputs[:, 0, :, :, :]
+        im2 = inputs[:, 1, :, :, :]
         input_h = im1.size()[2]
         input_w = im1.size()[3]
         pyramid_im1 = self.feature_pyramid_network(im1)
@@ -39,11 +40,14 @@ class Network(nn.Module):
             level = 6 - i
             first_iteration = (i==0)
             last_iteration  =(level==2)
+            if not last_iteration: 
+                h_up = pyramid_im1[i+1].size()[2]
+                w_up = pyramid_im1[i+1].size()[3]
 
             if first_iteration:
                 warped2 = feat2
             else:
-                flow_displacement = -up_flow[:,1::-1,:,:] * 20.0 / (2.0 ** level) #flow has size Bx2xHxW
+                flow_displacement = up_flow * 20.0 / (2.0 ** level) #flow has size Bx2xHxW
                 warping_layer = Warping() #feat2 has size BxCxHxW
                 warped2 = warping_layer(feat2, flow_displacement)
             if self.occlusion:
@@ -53,7 +57,7 @@ class Network(nn.Module):
                 if last_iteration:
                     occ_mask = self.occlusion_estimators[i](occ_inputs)
                 else:
-                    occ_mask, feat_up, mask_up = self.occlusion_estimators[i](occ_inputs)
+                    occ_mask, feat_up, mask_up = self.occlusion_estimators[i](occ_inputs, h_up, w_up)
                     occ_features_up.append(feat_up)
                     occ_mask_up.append(mask_up)
                 warped2 *= occ_mask
@@ -66,9 +70,9 @@ class Network(nn.Module):
             estimator_input = torch.cat(input_list, dim=1)
 
             if last_iteration:
-                features, flow = self.sceneflow_estimators[i](estimator_input)
+                features, flow = self.opticalflow_estimators[i](estimator_input)
             else:
-                flow, up_flow, up_feature = self.sceneflow_estimators[i](estimator_input)
+                flow, up_flow, up_feature = self.opticalflow_estimators[i](estimator_input, h_up, w_up)
                 flows.append(flow)
 
         residual_flow = self.context_network(torch.cat([features, flow], dim=1))
@@ -76,9 +80,9 @@ class Network(nn.Module):
         flows.append(refined_flow)
 
         #prediction = tf.multiply(tf.image.resize(refined_flow, size=(input_h, input_w)), 20.0, name='final_prediction')
-        upsample = nn.Upsample((input_h, input_w), mode='bilinear')
-        predicted_flow = upsample(refined_flow)
-        predicted_occ_mask = upsample(occ_mask)
+        self.upsample = nn.Upsample((input_h, input_w), mode='bilinear')
+        predicted_flow = self.upsample(refined_flow)*20.0
+        predicted_occ_mask = self.upsample(occ_mask)
         return predicted_flow, predicted_occ_mask 
 
 
