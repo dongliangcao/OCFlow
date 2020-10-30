@@ -127,7 +127,7 @@ class MpiSintel(Dataset):
             return images, flow
     
     def __len__(self):
-        return self.size + self.replicates
+        return self.size * self.replicates
     
 class MpiSintelClean(MpiSintel):
     def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
