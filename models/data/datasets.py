@@ -6,7 +6,7 @@ from os.path import *
 import numpy as np
 
 from glob import glob
-from utils import frame_utils
+from .utils import frame_utils
 
 from imageio import imread
 
@@ -97,10 +97,10 @@ class MpiSintel(Dataset):
         else:
             index = index % self.size
 
-            img1 = frame_utils.read_gen(self.image_list[index][0])
-            img2 = frame_utils.read_gen(self.image_list[index][1])
+            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
+            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
 
-            flow = frame_utils.read_gen(self.flow_list[index])
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
 
             images = [img1, img2]
             image_size = img1.shape[:2]
@@ -118,11 +118,11 @@ class MpiSintel(Dataset):
                 rescale = RescaleTransform()
                 images = list(map(rescale, images))
 
-            images = np.array(images).transpose(3, 0, 1, 2)
+            images = np.array(images).transpose(0, 3, 1, 2)
             flow = flow.transpose(2, 0, 1)
 
-            images = torch.from_numpy(images.astype(np.float32))
-            flow = torch.from_numpy(flow.astype(np.float32))
+            images = torch.from_numpy(images)
+            flow = torch.from_numpy(flow)
 
             return images, flow
     
@@ -175,10 +175,10 @@ class FlyingChairs(Dataset):
         else:
             index = index % self.size
 
-            img1 = frame_utils.read_gen(self.image_list[index][0])
-            img2 = frame_utils.read_gen(self.image_list[index][1])
+            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
+            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
 
-            flow = frame_utils.read_gen(self.flow_list[index])
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
 
             images = [img1, img2]
             image_size = img1.shape[:2]
@@ -194,11 +194,11 @@ class FlyingChairs(Dataset):
                 rescale = RescaleTransform()
                 images = list(map(rescale, images))
 
-            images = np.array(images).transpose(3,0,1,2)
+            images = np.array(images).transpose(0,3,1,2)
             flow = flow.transpose(2,0,1)
 
-            images = torch.from_numpy(images.astype(np.float32))
-            flow = torch.from_numpy(flow.astype(np.float32))
+            images = torch.from_numpy(images)
+            flow = torch.from_numpy(flow)
 
             return images, flow
 
@@ -236,8 +236,8 @@ class ImagesFromFolder(Dataset):
         else:
             index = index % self.size
 
-            img1 = frame_utils.read_gen(self.image_list[index][0])
-            img2 = frame_utils.read_gen(self.image_list[index][1])
+            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
+            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
 
             images = [img1, img2]
             image_size = img1.shape[:2]
@@ -247,8 +247,8 @@ class ImagesFromFolder(Dataset):
                 cropper = StaticCenterCrop(image_size, self.render_size)
             images = list(map(cropper, images))
 
-            images = np.array(images).transpose(3,0,1,2)
-            images = torch.from_numpy(images.astype(np.float32))
+            images = np.array(images).transpose(0,3,1,2)
+            images = torch.from_numpy(images)
 
             return images
 
