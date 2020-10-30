@@ -52,14 +52,16 @@ class SceneCompletionNet(nn.Module):
         self.down4 = Downsample(256, 512, 3, 2)
         self.down5 = Downsample(512, 512, 3, 2)
         self.down6 = Downsample(512, 512, 3, 2)
+        self.down7 = Downsample(512, 512, 3, 2)
         
         ## Decoder part
-        self.up1 = Upsample(512+512, 512, 3) # skip-connected with output from down5
-        self.up2 = Upsample(512+512, 512, 3) # skip-connected with output from down4
-        self.up3 = Upsample(512+256, 256, 3) # skip-connected with output from down3
-        self.up4 = Upsample(256+128, 128, 3) # skip-connected with output from down2
-        self.up5 = Upsample(128+64, 64, 3) # skip-connected with output from down1
-        self.up6 = Upsample(64+in_channels, in_channels, 3, activation=False) # skip-connected with output from input
+        self.up1 = Upsample(512+512, 512, 3) # skip-connected with output from down6
+        self.up2 = Upsample(512+512, 512, 3) # skip-connected with output from down5
+        self.up3 = Upsample(512+512, 512, 3) # skip-connected with output from down4
+        self.up4 = Upsample(512+256, 256, 3) # skip-connected with output from down3
+        self.up5 = Upsample(256+128, 128, 3) # skip-connected with output from down2
+        self.up6 = Upsample(128+64, 64, 3) # skip-connected with output from down1
+        self.up7 = Upsample(64+in_channels, in_channels, 3, activation=False) # skip-connected with output from input
         
     def forward(self, img):
         # encoder
@@ -69,13 +71,15 @@ class SceneCompletionNet(nn.Module):
         x4 = self.down4(x3)
         x5 = self.down5(x4)
         x6 = self.down6(x5)
+        x7 = self.down7(x6)
         #decoder
-        x = self.up1(x6, x5)
-        x = self.up2(x, x4)
-        x = self.up3(x, x3)
-        x = self.up4(x, x2)
-        x = self.up5(x, x1)
-        x = self.up6(x, img)
+        x = self.up1(x7, x6)
+        x = self.up2(x, x5)
+        x = self.up3(x, x4)
+        x = self.up4(x, x3)
+        x = self.up5(x, x2)
+        x = self.up6(x, x1)
+        x = self.up7(x, img)
         
         return x
  
