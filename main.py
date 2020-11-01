@@ -1,4 +1,4 @@
-from models.OCFlow_model import OCFlowModel
+from models.ocflow_model import OCFlowModel
 
 def main():
     mode = 'train'
