@@ -124,7 +124,7 @@ class MpiSintel(Dataset):
             images = torch.from_numpy(images)
             flow = torch.from_numpy(flow)
 
-            return images, flow
+            return images, flow #size [2,C,H,W]
     
     def __len__(self):
         return self.size * self.replicates

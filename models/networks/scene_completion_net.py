@@ -14,7 +14,7 @@ def weights_init_normal(model):
 
 class Downsample(nn.Module):
     def __init__(self, in_channels, out_channels, normalize=True):
-        super().__init__()
+        super(Downsample,self).__init__()
         layers = [nn.Conv2d(in_channels, out_channels, 4, stride=2, padding=1)]
         if normalize:
             layers.append(nn.BatchNorm2d(out_channels, 0.8))
@@ -25,7 +25,7 @@ class Downsample(nn.Module):
     
 class Upsample(nn.Module):
     def __init__(self, in_channels, out_channels, normalize=True):
-        super().__init__()
+        super(Upsample,self).__init__()
         layers = [nn.ConvTranspose2d(in_channels, out_channels, 4, stride=2, padding=1)]
         if normalize:
             layers.append(nn.BatchNorm2d(out_channels, 0.8))
@@ -42,7 +42,7 @@ class Upsample(nn.Module):
         
 class SceneCompletionNet(nn.Module):
     def __init__(self, channels=3):
-        super().__init__()
+        super(SceneCompletionNet, self).__init__()
         self.model = nn.Sequential(
             Downsample(channels, 64, normalize=False),
             Downsample(64, 64),

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 class MaskFlowNet(nn.Module):
     def __init__(self, occlusion = True, mean_pixel = None):
-        super().__init__()
+        super(MaskFlowNet,self).__init__()
         self.occlusion = occlusion
         self.mean_pixel = torch.zeros(3, dtype= torch.float32, requires_grad= False)
         if mean_pixel:

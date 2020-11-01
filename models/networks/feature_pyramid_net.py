@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super().__init__()
+        super(DoubleConv,self).__init__()
         
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=False),
@@ -21,7 +21,7 @@ class DoubleConv(nn.Module):
     
 class Upsample(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super().__init__()
+        super(Upsample,self).__init__()
         
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
         self.batchnorm = nn.BatchNorm2d(out_channels)
@@ -38,8 +38,11 @@ class Upsample(nn.Module):
         Returns:
             added feature map
         """
-        x = F.leaky_relu(self.batchnorm(self.deconv(x,output_size = y.size())), negative_slope= 0.1)
-        return x+y
+        x = self.deconv(x,output_size = y.size())
+        x = self.batchnorm(x)
+        x = F.leaky_relu(x, negative_slope= 0.1)
+        x = x+y
+        return x
     
 class FeaturePyramidNet(nn.Module):
     """
@@ -49,7 +52,7 @@ class FeaturePyramidNet(nn.Module):
     In between: skip-connection
     """
     def __init__(self):
-        super().__init__()
+        super(FeaturePyramidNet,self).__init__()
         
         self.layer1 = DoubleConv(in_channels=3, out_channels=16)
         self.layer2 = DoubleConv(in_channels=16, out_channels=32)
