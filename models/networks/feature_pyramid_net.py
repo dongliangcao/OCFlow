@@ -25,7 +25,7 @@ class Upsample(nn.Module):
         
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
         self.batchnorm = nn.BatchNorm2d(out_channels)
-
+        self.leaky = nn.LeakyReLU(negative_slope=0.1)
         
     def forward(self, x, y):
         """
@@ -38,11 +38,11 @@ class Upsample(nn.Module):
         Returns:
             added feature map
         """
-        x = self.deconv(x,output_size = y.size())
-        x = self.batchnorm(x)
-        x = F.leaky_relu(x, negative_slope= 0.1)
-        x = x+y
-        return x
+        f = self.deconv(x.clone(),output_size = y.size())
+        f = self.batchnorm(f)
+        f = self.leaky(f)
+        f = f+y
+        return f
     
 class FeaturePyramidNet(nn.Module):
     """

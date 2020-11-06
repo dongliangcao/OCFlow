@@ -39,7 +39,7 @@ class OCFlowModel():
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         device = 'cpu'
         ocflow_net.to(device)
-        optimizer = optim.Adam(ocflow_net.parameters(), lr = 0.001, )
+        optimizer = optim.Adam(ocflow_net.parameters(), lr = 0.001)
         with torch.autograd.set_detect_anomaly(True):
             for epoch in range(self.num_epoch): 
                 running_loss = 0.0
@@ -62,7 +62,6 @@ class OCFlowModel():
                     if (i+1) % self.print_every == 0:    # print every 200 mini-batches
                         print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 200))
                         running_loss = 0.0
-                    break
 
     def test(self):    
         pass
