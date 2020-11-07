@@ -52,10 +52,12 @@ class OcclusionEstimator(nn.Module):
         c3 = F.leaky_relu(self.conv3(c2), negative_slope= 0.1)
         c4 = F.leaky_relu(self.conv4(c3), negative_slope= 0.1)
         feat = F.leaky_relu(self.feat_layer(c4), negative_slope= 0.1)
-        occ_mask = torch.sigmoid(self.mask_layer(feat))
-        if self.highest_res: 
+        occ_mask = self.mask_layer(feat)  
+        if self.highest_res:
+            occ_mask = torch.sigmoid(10 * occ_mask)
             return occ_mask
         else: 
+            occ_mask = torch.sigmoid(occ_mask)
             features_up = torch.sigmoid(self.upconv1(feat, output_size = (h_up, w_up)))
             occ_mask_up = torch.sigmoid(self.upconv2(occ_mask, output_size =(h_up, w_up)))
             return (occ_mask, features_up, occ_mask_up)
