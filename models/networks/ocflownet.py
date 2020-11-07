@@ -16,7 +16,7 @@ class OCFlowNet(nn.Module):
         I2 = batch[:, 1, :, :, :]
         F12, O_s = self.mask_flow_net(batch)
         Iw1= self.warping(I2, F12)
-        O_h = torch.where(O_s > 0.5, 1, 0)
+        O_h = (torch.where(O_s > 0.5, 1, 0) - O_s).detach() + O_s
         Io1 = Iw1*O_h
         Ic1 = self.completion_net(Io1)
 
