@@ -247,6 +247,11 @@ class ImagesFromFolder(Dataset):
                 cropper = StaticCenterCrop(image_size, self.render_size)
             images = list(map(cropper, images))
 
+	    # rescale image range from [0, 255] to [0, 1]
+            if self.is_rescaled:
+                rescale = RescaleTransform()
+                images = list(map(rescale, images))
+
             images = np.array(images).transpose(0,3,1,2)
             images = torch.from_numpy(images)
 
