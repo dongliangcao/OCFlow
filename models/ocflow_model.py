@@ -44,13 +44,11 @@ class OCFlowModel():
             for epoch in range(self.num_epoch): 
                 running_loss = 0.0
                 for i, (image_batch, flow_batch) in enumerate(self.dataloader): 
-                    I1 = image_batch[:, 0, :, :, :].to(device)
-                    I2 = image_batch[:, 1, :, :, :].to(device)
                     image_batch = image_batch.to(device)
+                    I1 = image_batch[:, 0, :, :, :]
+                    I2 = image_batch[:, 1, :, :, :]
                     optimizer.zero_grad()
 
-                    print(I1.shape)
-                    print(I2.shape)
                     O_s, O_h, Ic1, Iw1 = ocflow_net(image_batch)
                     photometric_loss = self.charbonnier_loss(Iw1-I1, O_s)
                     reconstruction_loss = torch.sum(((I1-Ic1)*(1-O_h))**2)
