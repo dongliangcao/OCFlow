@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class Warping(nn.Module):
     def __init__(self):
-        super().__init__()
+        super(Warping,self).__init__()
         
     def forward(self, img: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
         """

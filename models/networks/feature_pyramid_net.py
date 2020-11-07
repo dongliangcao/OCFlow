@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super().__init__()
+        super(DoubleConv,self).__init__()
         
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=False),
@@ -21,13 +21,11 @@ class DoubleConv(nn.Module):
     
 class Upsample(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super().__init__()
+        super(Upsample,self).__init__()
         
-        self.upsample = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.1)
-        )
+        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
+        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.leaky = nn.LeakyReLU(negative_slope=0.1)
         
     def forward(self, x, y):
         """
@@ -40,7 +38,11 @@ class Upsample(nn.Module):
         Returns:
             added feature map
         """
-        return self.upsample(x) + y
+        f = self.deconv(x.clone(),output_size = y.size())
+        f = self.batchnorm(f)
+        f = self.leaky(f)
+        f = f+y
+        return f
     
 class FeaturePyramidNet(nn.Module):
     """
@@ -50,7 +52,7 @@ class FeaturePyramidNet(nn.Module):
     In between: skip-connection
     """
     def __init__(self):
-        super().__init__()
+        super(FeaturePyramidNet,self).__init__()
         
         self.layer1 = DoubleConv(in_channels=3, out_channels=16)
         self.layer2 = DoubleConv(in_channels=16, out_channels=32)
@@ -82,12 +84,13 @@ class FeaturePyramidNet(nn.Module):
         
         # top-down
         p6 = self.pyr_top(c6)
-        p5 = self.upsample5(p6, c5)
-        p4 = self.upsample4(p5, c4)
-        p3 = self.upsample3(p4, c3)
-        p2 = self.upsample2(p3, c2)
         
-        return p2, p3, p4, p5, p6
+        p5 = self.upsample5(p6,c5)
+        p4 = self.upsample4(p5,c4)
+        p3 = self.upsample3(p4,c3)
+        p2 = self.upsample2(p3,c2)
+        
+        return [p6, p5, p4, p3, p2]
       
     
     
