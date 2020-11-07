@@ -16,13 +16,13 @@ class OCFlowModel():
 
     def create_dataset(self): 
         if self.dataset_name == 'MpiSintelClean': 
-            dataset = MpiSintelClean(root =self.root)
+            dataset = MpiSintelClean(root =self.root, is_rescaled=True)
             dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=0)
         elif self.dataset_name == 'MpiSintelFinal': 
-            dataset = MpiSintelFinal(root =self.root)
+            dataset = MpiSintelFinal(root =self.root, is_rescaled=True)
             dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=0)
         elif self.dataset_name == 'FlyingChairs': 
-            dataset = FlyingChairs(root =self.root)
+            dataset = FlyingChairs(root =self.root, is_rescaled=True)
             dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=0)
         return dataset, dataloader
 
@@ -30,7 +30,7 @@ class OCFlowModel():
         diff = torch.pow((diff**2+0.001**2), q)
         diff = diff*mask
         diff_sum = torch.sum(diff)
-        loss_mean = diff_sum / (torch.sum(mask)+ 1e-6) 
+        loss_mean = diff_sum / (torch.sum(mask)+ 1e-12) 
         return loss_mean
 
     def train(self): 
@@ -50,8 +50,8 @@ class OCFlowModel():
                     optimizer.zero_grad()
 
                     O_s, O_h, Ic1, Iw1 = ocflow_net(image_batch)
-                    photometric_loss = self.charbonnier_loss(Iw1-I1, O_s)
-                    reconstruction_loss = torch.sum(((I1-Ic1)*(1-O_h))**2)
+                    photometric_loss = self.charbonnier_loss(Iw1-I1, O_h)
+                    reconstruction_loss = torch.sum(torch.abs(I1-Ic1)*(1-O_h)) / (torch.sum(1-O_h) + 1e-12) 
                     total_loss = self.gammas[0]*photometric_loss + self.gammas[1]*reconstruction_loss
                     total_loss.backward()
                     optimizer.step()
