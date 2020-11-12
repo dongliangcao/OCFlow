@@ -1,12 +1,13 @@
-import models.ocflow_model
-from models.data.utils.flow_utils import read_flow
-from models.networks.image_inpainting_net import SceneCompletionNet
-from models.networks.warping_layer import Warping
 from imageio import imread
 import os
 import torch
 import torch.optim as optim
 import numpy as np
+import sys
+sys.path.append('/home/trung/OCFlow')
+from models.data.utils.flow_utils import read_flow
+from models.networks.image_inpainting_net import SceneCompletionNet
+from models.networks.warping_layer import Warping
 
 class OverfitInpainting(): 
     def __init__(self, num_epoch, print_every): 
@@ -15,26 +16,30 @@ class OverfitInpainting():
     def train(self): 
         completion_net = SceneCompletionNet()
         warping = Warping()
-
-        dir_name = os.path.dirname(os.getcwd())
+        dir_name = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+        print(dir_name)
         dir_flow = os.path.join(dir_name, 'sample_data/optical_flow.flo')
         dir_mask = os.path.join(dir_name, 'sample_data/occlusion_mask.png')
         dir_im1 = os.path.join(dir_name, 'sample_data/image1.png')
         dir_im2 = os.path.join(dir_name, 'sample_data/image2.png')
 
-        flow = torch.from_numpy(read_flow(dir_flow)) # [H,W,2]
-        occlusion_mask = torch.from_numpy(np.array(imread(dir_mask))) #[H,W]
-        img1 = torch.from_numpy(np.array(imread(dir_im1))) # [H,W,3]
-        img2 = torch.from_numpy(np.array(imread(dir_im2)))
+        flow = torch.from_numpy(read_flow(dir_flow)).float() # [H,W,2]
+        occlusion_mask = torch.from_numpy(np.array(imread(dir_mask))).float() #[H,W]
+        img1 = torch.from_numpy(np.array(imread(dir_im1))).float() # [H,W,3]
+        img2 = torch.from_numpy(np.array(imread(dir_im2))).float()
 
         flow = flow.unsqueeze(0).permute(0,3,1,2) #[1,2,H,W]
         occlusion_mask = occlusion_mask.view(1,1,occlusion_mask.size()[0], occlusion_mask.size()[1]) #[1,1,H,W]
         img1 = img1.unsqueeze(0).permute(0,3,1,2)
         img2 = img2.unsqueeze(0).permute(0,3,1,2)
-
+        print(img2.dtype)
+        print(img1.dtype)
+        print(flow.dtype)
+        print(occlusion_mask.dtype)
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        device = 'cpu'
+        print(device)
+        #device = 'cpu'
         completion_net.to(device)
         optimizer = optim.Adam(completion_net.parameters(), lr = 0.001)
         img1 = img1.to(device)
