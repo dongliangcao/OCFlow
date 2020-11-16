@@ -62,6 +62,7 @@ class SceneCompletionNet(nn.Module):
         self.up5 = Upsample(256+128, 128, 3) # skip-connected with output from down2
         self.up6 = Upsample(128+64, 64, 3) # skip-connected with output from down1
         self.up7 = Upsample(64+in_channels, in_channels, 3, activation=False) # skip-connected with output from input
+        self.tanh = nn.Tanh()
         
     def forward(self, img):
         # encoder
@@ -80,6 +81,7 @@ class SceneCompletionNet(nn.Module):
         x = self.up5(x, x2)
         x = self.up6(x, x1)
         x = self.up7(x, img)
+        x = self.tanh(x)
         
         return x
  

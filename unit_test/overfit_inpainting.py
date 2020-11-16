@@ -66,10 +66,10 @@ class OverfitInpainting():
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item()
+            #running_loss += loss.item()
             if (epoch+1) % self.print_every == 0:    # print every 200 mini-batches
-                print('epoch %d th, average loss: %.3f' % ( epoch+1, running_loss / (epoch+1)))
-                running_loss = 0
+                print('epoch %d th, loss: %.3f' % ( epoch, loss.item()))
+                #running_loss = 0
 def main(): 
     model = OverfitInpainting(num_epoch = 1, print_every =1)
     model.train()
