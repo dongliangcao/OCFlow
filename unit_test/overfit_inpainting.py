@@ -8,11 +8,12 @@ sys.path.append('/home/trung/OCFlow')
 from models.data.utils.flow_utils import read_flow
 from models.networks.image_inpainting_net import SceneCompletionNet
 from models.networks.warping_layer import Warping
-
+from torchvision import transforms
 class OverfitInpainting(): 
-    def __init__(self, num_epoch, print_every): 
+    def __init__(self, num_epoch, print_every, is_normalize = True): 
         self.num_epoch = num_epoch
         self.print_every = print_every
+        self.is_normalize = is_normalize
     def train(self): 
         completion_net = SceneCompletionNet()
         warping = Warping()
@@ -23,19 +24,26 @@ class OverfitInpainting():
         dir_im1 = os.path.join(dir_name, 'sample_data/image1.png')
         dir_im2 = os.path.join(dir_name, 'sample_data/image2.png')
 
-        flow = torch.from_numpy(read_flow(dir_flow)).float() # [H,W,2]
-        occlusion_mask = torch.from_numpy(np.array(imread(dir_mask))).float() #[H,W]
-        img1 = torch.from_numpy(np.array(imread(dir_im1))).float() # [H,W,3]
-        img2 = torch.from_numpy(np.array(imread(dir_im2))).float()
+        #flow = torch.from_numpy(read_flow(dir_flow)).float() # [H,W,2]
+        #occlusion_mask = torch.from_numpy(np.array(imread(dir_mask))).float() #[H,W]
+        #img1 = torch.from_numpy(np.array(imread(dir_im1))).float() # [H,W,3]
+        #img2 = torch.from_numpy(np.array(imread(dir_im2))).float()
 
-        flow = flow.unsqueeze(0).permute(0,3,1,2) #[1,2,H,W]
-        occlusion_mask = occlusion_mask.view(1,1,occlusion_mask.size()[0], occlusion_mask.size()[1]) #[1,1,H,W]
-        img1 = img1.unsqueeze(0).permute(0,3,1,2)
-        img2 = img2.unsqueeze(0).permute(0,3,1,2)
-        print(img2.dtype)
-        print(img1.dtype)
-        print(flow.dtype)
-        print(occlusion_mask.dtype)
+        to_tensor = transforms.ToTensor()
+        flow = to_tensor(read_flow(dir_flow)) # [2,H,W]
+        occlusion_mask = to_tensor(np.expand_dims(np.array(imread(dir_mask)), axis = -1)) #[1,H,W]
+        img1 = to_tensor(np.array(imread(dir_im1))) # [3,H,W]
+        img2 = to_tensor(np.array(imread(dir_im2))) #[3,H,W]
+
+        #data_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean =[0.5,0.5,0.5], std = [0.5,0.5,0.5])])
+        if self.is_normalize: 
+            normalize = transforms.Normalize([0.5,0.5,0.5], [0.5, 0.5, 0.5])
+            img1 = normalize(img1)
+            img2 = normalize(img2)
+        flow = flow.unsqueeze(0) #[1,2,H,W]
+        occlusion_mask = occlusion_mask.unsqueeze(0) #[1,1,H,W]
+        img1 = img1.unsqueeze(0)
+        img2 = img2.unsqueeze(0)
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print(device)
@@ -63,7 +71,7 @@ class OverfitInpainting():
                 print('epoch %d th, average loss: %.3f' % ( epoch+1, running_loss / (epoch+1)))
                 running_loss = 0
 def main(): 
-    model = OverfitInpainting(num_epoch = 10, print_every =1)
+    model = OverfitInpainting(num_epoch = 1, print_every =1)
     model.train()
 if __name__ == '__main__':
     main()
