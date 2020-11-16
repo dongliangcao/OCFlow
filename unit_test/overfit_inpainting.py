@@ -9,11 +9,13 @@ from models.data.utils.flow_utils import read_flow
 from models.networks.image_inpainting_net import SceneCompletionNet
 from models.networks.warping_layer import Warping
 from torchvision import transforms
+from torch.utils.tensorboard import SummaryWriter
 class OverfitInpainting(): 
-    def __init__(self, num_epoch, print_every, is_normalize = True): 
+    def __init__(self, num_epoch, print_every, is_normalize = True, learning_rate = 0.001): 
         self.num_epoch = num_epoch
         self.print_every = print_every
         self.is_normalize = is_normalize
+        self.learning_rate = learning_rate
     def train(self): 
         completion_net = SceneCompletionNet()
         warping = Warping()
@@ -47,15 +49,17 @@ class OverfitInpainting():
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print(device)
-        #device = 'cpu'
+        device = 'cpu'
         completion_net.to(device)
-        optimizer = optim.Adam(completion_net.parameters(), lr = 0.001)
+        optimizer = optim.Adam(completion_net.parameters(), lr = self.learning_rate)
         img1 = img1.to(device)
         img2 = img2.to(device)
         flow = flow.to(device)
         occlusion_mask = occlusion_mask.to(device)
 
         running_loss = 0.0
+        writer = SummaryWriter()
+        writer.add_graph(completion_net, img1)
         for epoch in range(self.num_epoch): 
             optimizer.zero_grad()
             Iw1= warping(img2, flow)
@@ -66,12 +70,13 @@ class OverfitInpainting():
             loss.backward()
             optimizer.step()
 
-            #running_loss += loss.item()
+            running_loss += loss.item()
             if (epoch+1) % self.print_every == 0:    # print every 200 mini-batches
-                print('epoch %d th, loss: %.3f' % ( epoch, loss.item()))
-                #running_loss = 0
+                print('epoch %d th, loss: %.3f' % ( epoch, running_loss/self.print_every))
+                writer.add_scalar('training loss', running_loss / self.print_every, epoch)
+                running_loss = 0
 def main(): 
-    model = OverfitInpainting(num_epoch = 1, print_every =1)
+    model = OverfitInpainting(num_epoch = 10, print_every =1)
     model.train()
 if __name__ == '__main__':
     main()
