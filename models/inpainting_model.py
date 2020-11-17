@@ -96,7 +96,7 @@ class InpaintingModel(pl.LightningModule):
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])
-        dataset = ImgFlowOccFromFolder(root=self.root, transform=transform)
+        dataset = ImgFlowOccFromFolder(root=self.root, transform=transform, resize=transforms.Resize(self.hparams['image_size']))
         train_dset, val_dset, test_dset = random_split(dataset, [ceil(len(dataset)*0.8), ceil(len(dataset)*0.1), len(dataset) - ceil(len(dataset)*0.8) - ceil(len(dataset)*0.1)])
         self.datasets['train'] = train_dset
         self.datasets['val'] = val_dset

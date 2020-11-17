@@ -238,8 +238,9 @@ class ImagesFromFolder(Dataset):
         return self.size * self.replicates
 
 class ImgFlowOccFromFolder(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1):
+    def __init__(self, transform=transforms.ToTensor(), resize=None, root='', iext='png', replicates=1):
         self.transform = transform
+        self.resize = resize
         self.replicates = replicates
         
         first_images = sorted(glob(join(root, 'img_1', '*.' + iext)))
@@ -274,17 +275,24 @@ class ImgFlowOccFromFolder(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
+            if self.resize:
+                img1 = self.resize(img1)
+                img2 = self.resize(img2)
             images = torch.stack([img1, img2])
             
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
+            if self.resize:
+                flow = self.resize(flow)
 
             occlusion = frame_utils.read_gen(self.occlusion_list[index])
             occlusion = cropper(occlusion)
             occlusion = occlusion.transpose(2, 0, 1)
             occlusion = torch.from_numpy(occlusion)
+            if self.resize:
+                occlusion = self.resize(occlusion)
             return images, flow, occlusion
         
     def __len__(self):
