@@ -63,10 +63,10 @@ class OverfitInpainting():
         for epoch in range(self.num_epoch): 
             optimizer.zero_grad()
             Iw1= warping(img2, flow)
-            Io1 = Iw1*occlusion_mask
+            Io1 = Iw1*(1-occlusion_mask)
             Ic1 = completion_net(Io1)
 
-            loss = torch.sum(torch.abs(img1-Ic1)*(1-occlusion_mask)) / (torch.sum(1-occlusion_mask) + 1e-12) 
+            loss = torch.sum(torch.abs(img1-Ic1)*occlusion_mask) / (occlusion_mask + 1e-12) 
             loss.backward()
             optimizer.step()
 
