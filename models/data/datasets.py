@@ -1,4 +1,5 @@
 import torch
+import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 
 import os
@@ -50,13 +51,14 @@ class StaticCenterCrop:
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
     
 class MpiSintel(Dataset):
-    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', dstype='clean', replicates=1):
-        self.is_cropped = is_cropped
-        self.is_rescaled = is_rescaled
-        if self.is_cropped:
-            if not crop_size:
-                raise ValueError('crop_size should be given.')
-            self.crop_size = crop_size
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1):
+#         self.is_cropped = is_cropped
+#         self.is_rescaled = is_rescaled
+#         if self.is_cropped:
+#             if not crop_size:
+#                 raise ValueError('crop_size should be given.')
+#             self.crop_size = crop_size
+        self.transform = transform
         self.replicates = replicates
         
         flow_root = join(root, 'flow')
@@ -97,31 +99,23 @@ class MpiSintel(Dataset):
         else:
             index = index % self.size
 
-            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
-            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
 
-            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
-
-            images = [img1, img2]
             image_size = img1.shape[:2]
 
-            if self.is_cropped:
-                cropper = StaticRandomCrop(image_size, self.crop_size)
-            else:
-                cropper = StaticCenterCrop(image_size, self.render_size)
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            images = torch.stack([img1, img2])
 
-            images = list(map(cropper, images))
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
-
-            # rescale image range from [0, 255] to [0, 1]
-            if self.is_rescaled:
-                rescale = RescaleTransform()
-                images = list(map(rescale, images))
-
-            images = np.array(images).transpose(0, 3, 1, 2)
-            flow = flow.transpose(2, 0, 1)
-
-            images = torch.from_numpy(images)
+            flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
 
             return images, flow #size [2,C,H,W]
@@ -130,21 +124,22 @@ class MpiSintel(Dataset):
         return self.size * self.replicates
     
 class MpiSintelClean(MpiSintel):
-    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
-        super().__init__(is_cropped=is_cropped, is_rescaled=is_rescaled, crop_size=crop_size, root=root, dstype='clean', replicates=replicates)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates)
 
 class MpiSintelFinal(MpiSintel):
-    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
-        super().__init__(is_cropped=is_cropped, is_rescaled=is_rescaled, crop_size=crop_size, root=root, dstype='final', replicates=replicates)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates)
     
 class FlyingChairs(Dataset):
-    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', replicates=1):
-        self.is_cropped = is_cropped
-        self.is_rescaled = is_rescaled
-        if self.is_cropped:
-            if not crop_size:
-                raise ValueError('crop_size should be given.')
-            self.crop_size = crop_size
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
+#         self.is_cropped = is_cropped
+#         self.is_rescaled = is_rescaled
+#         if self.is_cropped:
+#             if not crop_size:
+#                 raise ValueError('crop_size should be given.')
+#             self.crop_size = crop_size
+        self.transform = transform
         self.replicates = replicates
 
         images = sorted( glob( join(root, '*.ppm') ) )
@@ -174,30 +169,23 @@ class FlyingChairs(Dataset):
             return [self[ii] for ii in range(*index.indices(len(self)))]
         else:
             index = index % self.size
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
 
-            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
-            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
+            image_size = img1.shape[:2]
+
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            images = torch.stack([img1, img2])
 
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
-
-            images = [img1, img2]
-            image_size = img1.shape[:2]
-            if self.is_cropped:
-                cropper = StaticRandomCrop(image_size, self.crop_size)
-            else:
-                cropper = StaticCenterCrop(image_size, self.render_size)
-            images = list(map(cropper, images))
             flow = cropper(flow)
-            
-            # rescale image range from [0, 255] to [0, 1]
-            if self.is_rescaled:
-                rescale = RescaleTransform()
-                images = list(map(rescale, images))
-
-            images = np.array(images).transpose(0,3,1,2)
             flow = flow.transpose(2,0,1)
-
-            images = torch.from_numpy(images)
             flow = torch.from_numpy(flow)
 
             return images, flow
@@ -206,13 +194,8 @@ class FlyingChairs(Dataset):
         return self.size * self.replicates 
     
 class ImagesFromFolder(Dataset):
-    def __init__(self, is_cropped=False, is_rescaled=False, crop_size=None, root='', iext='png', replicates=1):
-        self.is_cropped = is_cropped
-        self.is_rescaled = is_rescaled
-        if self.is_cropped:
-            if not crop_size:
-                raise ValueError('crop_size should be given.')
-            self.crop_size = crop_size
+    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1):
+        self.transform = transform
         self.replicates = replicates
 
         images = sorted(glob(join(root, '*.' + iext)))
@@ -236,26 +219,73 @@ class ImagesFromFolder(Dataset):
         else:
             index = index % self.size
 
-            img1 = frame_utils.read_gen(self.image_list[index][0]).astype(np.float32)
-            img2 = frame_utils.read_gen(self.image_list[index][1]).astype(np.float32)
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
 
-            images = [img1, img2]
             image_size = img1.shape[:2]
-            if self.is_cropped:
-                cropper = StaticRandomCrop(image_size, self.crop_size)
-            else:
-                cropper = StaticCenterCrop(image_size, self.render_size)
-            images = list(map(cropper, images))
-
-	    # rescale image range from [0, 255] to [0, 1]
-            if self.is_rescaled:
-                rescale = RescaleTransform()
-                images = list(map(rescale, images))
-
-            images = np.array(images).transpose(0,3,1,2)
-            images = torch.from_numpy(images)
-
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            images = torch.stack([img1, img2])
+            
             return images
 
+    def __len__(self):
+        return self.size * self.replicates
+
+class ImgFlowOccFromFolder(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1):
+        self.transform = transform
+        self.replicates = replicates
+        
+        first_images = sorted(glob(join(root, 'img_1', '*.' + iext)))
+        second_images = sorted(glob(join(root, 'img_2', '*.' + iext)))
+        self.flow_list = sorted(glob(join(root, 'flow', '*.flo')))
+        self.occlusion_list = sorted(glob(join(root, 'occlusion', '*.' + iext)))
+        assert len(first_images) == len(second_images) and len(first_images) == len(self.flow_list) and len(first_images) == len(self.occlusion_list), 'The number of image pairs should be equal to the number of optical flows and occlusion maps'
+        self.image_list = list(zip(first_images, second_images))
+        
+        self.size = len(self.image_list)
+        
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+    
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            image_size = img1.shape[:2]
+
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            images = torch.stack([img1, img2])
+            
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
+            flow = cropper(flow)
+            flow = flow.transpose(2,0,1)
+            flow = torch.from_numpy(flow)
+
+            occlusion = frame_utils.read_gen(self.occlusion_list[index])
+            occlusion = cropper(occlusion)
+            occlusion = occlusion.transpose(2, 0, 1)
+            occlusion = torch.from_numpy(occlusion)
+            return images, flow, occlusion
+        
     def __len__(self):
         return self.size * self.replicates

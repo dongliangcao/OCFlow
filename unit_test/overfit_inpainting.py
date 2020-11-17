@@ -49,7 +49,7 @@ class OverfitInpainting():
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print(device)
-        device = 'cpu'
+        # device = 'cpu'
         completion_net.to(device)
         optimizer = optim.Adam(completion_net.parameters(), lr = self.learning_rate)
         img1 = img1.to(device)
