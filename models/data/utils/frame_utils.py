@@ -14,6 +14,9 @@ def read_gen(filename: str):
     ext = splitext(filename)[-1]
     if ext == '.png' or ext == '.jpeg' or ext == '.ppm' or ext == '.jpg':
         im = imread(filename)
+        if len(im.shape) == 2:
+            # occlusion map
+            im = np.expand_dims(im, axis=-1)
         if im.shape[2] > 3:
             return im[:,:,:3]
         else:
