@@ -88,8 +88,8 @@ class FlowNet(nn.Module):
             
         residual_flow = self.context_network(torch.cat([feature, flow], dim=1))
         refined_flow = flow + residual_flow
-        
-        predicted_flow = self.upsample(refined_flow)*20.0
+        # I omit the multiplication with 20
+        predicted_flow = self.upsample(refined_flow)# *20.0
         
         return predicted_flow
         
