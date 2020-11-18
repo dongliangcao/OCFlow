@@ -120,7 +120,7 @@ class FlowNetCV(nn.Module):
                     m.bias.data.zero_()
 
 
-    def warp(self, x, flo):
+    def warp(self, img, flow):
         """
         warp an image/tensor (im2) back to im1, according to the optical flow
 
@@ -128,34 +128,29 @@ class FlowNetCV(nn.Module):
         flo: [B, 2, H, W] flow
 
         """
-        B, C, H, W = x.size()
-        # mesh grid 
-        xx = torch.arange(0, W).view(1,-1).repeat(H,1)
-        yy = torch.arange(0, H).view(-1,1).repeat(1,W)
-        xx = xx.view(1,1,H,W).repeat(B,1,1,1)
-        yy = yy.view(1,1,H,W).repeat(B,1,1,1)
-        grid = torch.cat((xx,yy),1).float()
-
-        if x.is_cuda:
+        B, C, H, W = img.size()
+        # create mesh grid
+        xx = torch.arange(0, W).view(1, -1).repeat(H, 1)
+        yy = torch.arange(0, H).view(-1, 1).repeat(1, W)
+        xx = xx.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        yy = yy.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        grid = torch.cat((xx, yy), 1).float()
+        # cast into cuda
+        if img.is_cuda:
             grid = grid.cuda()
+        # require gradient
         grid.requires_grad = True
-        vgrid = grid + flo
-
-        # scale grid to [-1,1] 
-        vgrid[:,0,:,:] = 2.0*vgrid[:,0,:,:].clone() / max(W-1,1)-1.0
-        vgrid[:,1,:,:] = 2.0*vgrid[:,1,:,:].clone() / max(H-1,1)-1.0
-
-        vgrid = vgrid.permute(0,2,3,1)        
-        output = nn.functional.grid_sample(x, vgrid)
-        mask = torch.autograd.Variable(torch.ones(x.size()))
-        if x.is_cuda:
-            mask = mask.cuda()
-        mask = nn.functional.grid_sample(mask, vgrid)
+        vgrid = grid + flow
+        # scale grid to [-1, 1] to support grid_sample function in pytorch
+        # https://pytorch.org/docs/stable/nn.functional.html#grid-sample
+        vgrid[:,0,:,:] = 2.0 * vgrid[:,0,:,:].clone() / max(W-1, 1) - 1.0
+        vgrid[:,1,:,:] = 2.0 * vgrid[:,1,:,:].clone() / max(H-1, 1) - 1.0
+        # permute vgrid to size [B, H, W, 2] to support grid_sample function
+        vgrid = vgrid.permute(0, 2, 3, 1)
         
-        mask[mask<0.9999] = 0
-        mask[mask>0] = 1
+        output = F.grid_sample(img, vgrid, align_corners=False)
         
-        return output*mask
+        return output
 
 
     def forward(self,x):
