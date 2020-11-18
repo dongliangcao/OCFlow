@@ -11,6 +11,7 @@ from models.networks.simple_flow_net import SimpleFlowNet
 from models.networks.flow_net_s import FlowNetS
 from models.networks.flow_net_c import FlowNetC
 from models.networks.cost_volume_flow_net import FlowNetCV
+from models.networks.flow_net import FlowNet
 from models.networks.warping_layer import Warping
 from torchvision import transforms
 
@@ -31,6 +32,8 @@ class FlowModel(pl.LightningModule):
             self.model = FlowNetS()
         elif model == 'flownetc':
             self.model = FlowNetC()
+        elif model == 'flownet':
+            self.model = FlowNet()
         else:
             raise ValueError(f'Unsupported model: {model}')
         
