@@ -194,10 +194,10 @@ class FlyingChairs(Dataset):
         return self.size * self.replicates 
     
 class ImagesFromFolder(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1):
+    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1, stack_imgs=True):
         self.transform = transform
         self.replicates = replicates
-
+        self.stack_imgs = stack_imgs
         images = sorted(glob(join(root, '*.' + iext)))
         self.image_list = []
         for i in range(len(images)-1):
@@ -230,7 +230,10 @@ class ImagesFromFolder(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
-            images = torch.stack([img1, img2])
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
             
             return images
 
@@ -238,10 +241,11 @@ class ImagesFromFolder(Dataset):
         return self.size * self.replicates
 
 class ImgFlowOccFromFolder(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), resize=None, root='', iext='png', replicates=1):
+    def __init__(self, transform=transforms.ToTensor(), resize=None, root='', iext='png', replicates=1, stack_imgs=True):
         self.transform = transform
         self.resize = resize
         self.replicates = replicates
+        self.stack_imgs = stack_imgs
         
         first_images = sorted(glob(join(root, 'img_1', '*.' + iext)))
         second_images = sorted(glob(join(root, 'img_2', '*.' + iext)))
@@ -278,7 +282,10 @@ class ImgFlowOccFromFolder(Dataset):
             if self.resize:
                 img1 = self.resize(img1)
                 img2 = self.resize(img2)
-            images = torch.stack([img1, img2])
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
             
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
@@ -287,7 +294,7 @@ class ImgFlowOccFromFolder(Dataset):
             if self.resize:
                 flow = self.resize(flow)
 
-            occlusion = frame_utils.read_gen(self.occlusion_list[index])
+            occlusion = frame_utils.read_gen(self.occlusion_list[index]).astype(np.float32)
             occlusion = cropper(occlusion)
             occlusion = occlusion.transpose(2, 0, 1)
             occlusion = torch.from_numpy(occlusion)

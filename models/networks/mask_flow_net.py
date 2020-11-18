@@ -79,7 +79,6 @@ class MaskFlowNet(nn.Module):
         refined_flow = flow + residual_flow
         flows.append(refined_flow)
 
-        #prediction = tf.multiply(tf.image.resize(refined_flow, size=(input_h, input_w)), 20.0, name='final_prediction')
         self.upsample = nn.Upsample((input_h, input_w), mode='bilinear')
         predicted_flow = self.upsample(refined_flow)*20.0
         predicted_occ_mask = self.upsample(occ_mask)
