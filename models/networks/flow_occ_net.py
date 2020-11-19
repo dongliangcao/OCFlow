@@ -66,9 +66,9 @@ class OcclusionEstimator(nn.Module):
             occ_up = torch.sigmoid(self.upconv2(occ, output_size =(h_up, w_up)))
             return (occ, occ_up, feature_up)
 
-class MaskFlowNet(nn.Module):
+class FlowOccNet(nn.Module):
     def __init__(self):
-        super(MaskFlowNet,self).__init__()
+        super(FlowOccNet,self).__init__()
         # correlation calculation
         self.correlation_layer = CostVolumeLayer()
         # feature pyramid network

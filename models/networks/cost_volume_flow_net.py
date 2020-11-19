@@ -216,8 +216,6 @@ class FlowNetCV(nn.Module):
         warp3 = self.warp(c23, up_flow4*2.5)
         corr3 = self.corr(c13, warp3) 
         corr3 = self.leakyRELU(corr3)
-        
-
         x = torch.cat((corr3, c13, up_flow4, up_feat4), 1)
         x = torch.cat((self.conv3_0(x), x),1)
         x = torch.cat((self.conv3_1(x), x),1)

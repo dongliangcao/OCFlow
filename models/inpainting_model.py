@@ -8,7 +8,6 @@ from torch.optim import Adam
 
 from models.data.datasets import ImgFlowOccFromFolder
 from models.networks.image_inpainting_net import SceneCompletionNet
-from models.networks.warping_layer import Warping
 from torchvision import transforms
 
 import os
@@ -20,12 +19,43 @@ class InpaintingModel(pl.LightningModule):
         self.root = root
         self.hparams = hparams
         self.model = SceneCompletionNet()
-        self.warp = Warping()
         
     def forward(self, x):
         out = self.model(x)
         
         return out
+    
+    def warp(self, img, flow):
+        """
+        warp an image/tensor (im2) back to im1, according to the optical flow
+
+        x: [B, C, H, W] (im2)
+        flo: [B, 2, H, W] flow
+
+        """
+        B, C, H, W = img.size()
+        # create mesh grid
+        xx = torch.arange(0, W).view(1, -1).repeat(H, 1)
+        yy = torch.arange(0, H).view(-1, 1).repeat(1, W)
+        xx = xx.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        yy = yy.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        grid = torch.cat((xx, yy), 1).float()
+        # cast into cuda
+        if img.is_cuda:
+            grid = grid.cuda()
+        # require gradient
+        grid.requires_grad = True
+        vgrid = grid + flow
+        # scale grid to [-1, 1] to support grid_sample function in pytorch
+        # https://pytorch.org/docs/stable/nn.functional.html#grid-sample
+        vgrid[:,0,:,:] = 2.0 * vgrid[:,0,:,:].clone() / max(W-1, 1) - 1.0
+        vgrid[:,1,:,:] = 2.0 * vgrid[:,1,:,:].clone() / max(H-1, 1) - 1.0
+        # permute vgrid to size [B, H, W, 2] to support grid_sample function
+        vgrid = vgrid.permute(0, 2, 3, 1)
+        
+        output = F.grid_sample(img, vgrid, align_corners=False)
+        
+        return output
     
     @property
     def is_cuda(self):
@@ -39,7 +69,7 @@ class InpaintingModel(pl.LightningModule):
         imgs, flow, occ = batch
         imgs, flow, occ = imgs.to(self.device), flow.to(self.device), occ.to(self.device)
         
-        img1, img2 = imgs[:, 0, :, :], imgs[:, 1, :, :]
+        img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
         
         img_warped = self.warp(img2, flow)
         img_occluded = img_warped * (1 - occ) # 1: occluded, 0: non-occluded
@@ -96,7 +126,7 @@ class InpaintingModel(pl.LightningModule):
             transforms.ToTensor(),
             transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
         ])
-        dataset = ImgFlowOccFromFolder(root=self.root, transform=transform, resize=transforms.Resize(self.hparams['image_size']))
+        dataset = ImgFlowOccFromFolder(root=self.root, transform=transform, resize=transforms.Resize(self.hparams['image_size']), stack_imgs=False)
         train_dset, val_dset, test_dset = random_split(dataset, [ceil(len(dataset)*0.8), ceil(len(dataset)*0.1), len(dataset) - ceil(len(dataset)*0.8) - ceil(len(dataset)*0.1)])
         self.datasets['train'] = train_dset
         self.datasets['val'] = val_dset

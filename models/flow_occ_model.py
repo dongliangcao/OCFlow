@@ -1,4 +1,4 @@
-"""Test occlusion map prediction network with ground truth occlusion map"""
+"""Test flow/occlusion prediction network with ground truth flow/occlusion"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,27 +7,33 @@ from torch.utils.data import DataLoader, random_split
 from torch.optim import Adam
 
 from models.data.datasets import ImgFlowOccFromFolder
-from models.networks.simple_occlusion_net import SimpleOcclusionNet
-from models.networks.occlusion_net_s import OcclusionNetS
-from models.networks.occlusion_net_c import OcclusionNetC
-
+from models.networks.simple_flow_occ_net import SimpleFlowOccNet
+from models.networks.flow_occ_net_s import FlowOccNetS
+from models.networks.flow_occ_net_c import FlowOccNetC
+from models.networks.cost_volume_flow_occ_net import FlowOccNetCV
+from models.networks.flow_occ_net import FlowOccNet
+from models.networks.warping_layer import Warping
 from torchvision import transforms
 
 import os
 from math import ceil
 
-class OcclusionModel(pl.LightningModule):
+class FlowOccModel(pl.LightningModule):
     def __init__(self, root, hparams):
         super().__init__()
         self.root = root
         self.hparams = hparams
         model = self.hparams.get('model', 'simple')
         if model == 'simple':
-            self.model = SimpleOcclusionNet()
-        elif model == 'occnets':
-            self.model = OcclusionNetS()
-        elif model == 'occnetc':
-            self.model = OcclusionNetC()
+            self.model = SimpleFlowOccNet()
+        elif model == 'pwoc':
+            self.model = FlowOccNetCV()
+        elif model == 'flowoccnets':
+            self.model = FlowOccNetS()
+        elif model == 'flowoccnetc':
+            self.model = FlowOccNetC()
+        elif model == 'flowoccnet':
+            self.model = FlowOccNet()
         else:
             raise ValueError(f'Unsupported model: {model}')
         
@@ -45,14 +51,14 @@ class OcclusionModel(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        imgs, _, occ = batch
-        imgs, occ = imgs.to(self.device), occ.to(self.device)
+        imgs, flow, occ = batch
+        imgs, flow, occ = imgs.to(self.device), flow.to(self.device), occ.to(self.device)
         
-        occ_pred = self.forward(imgs)
+        flow_pred, occ_pred = self.forward(imgs)
         
-        loss = F.binary_cross_entropy(occ_pred, occ)
-        
-        return loss
+        flow_loss = F.l1_loss(flow_pred, flow)
+        occ_loss = F.binary_cross_entropy(occ_pred, occ)
+        return flow_loss + occ_loss
     
     def general_epoch_end(self, outputs, mode):
         avg_loss = torch.stack([output[mode + '_loss'] for output in outputs]).cpu().mean()
