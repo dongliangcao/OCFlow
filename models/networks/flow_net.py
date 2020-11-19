@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn import init
+
 class OpticalFlowEstimator(nn.Module): 
     """
     Network for predicting optical flow from cost volumes of masked, warped feature of second frame and feature of first frame. 
