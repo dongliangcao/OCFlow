@@ -51,53 +51,31 @@ class FlowModel(pl.LightningModule):
         
     def general_step(self, batch, batch_idx, mode):
         imgs, flow, _ = batch
-        imgs, flow = imgs.to(self.device), flow.to(self.device)
+        #imgs, flow = imgs.to(self.device), flow.to(self.device)
         
-        flow_pred = self.forward(imgs)
+        flow_pred = self.model(imgs)
         
         loss = F.l1_loss(flow_pred, flow)
         
         return loss
     
-    def general_epoch_end(self, outputs, mode):
-        avg_loss = torch.stack([output[mode + '_loss'] for output in outputs]).cpu().mean()
-        
-        return avg_loss
     
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'train')
-        tensorboard_logs = {'train_loss': loss}
-        
-        return {'loss': loss, 'train_loss': loss, 'log': tensorboard_logs}
+        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        return loss
     
-    def training_epoch_end(self, outputs):
-        avg_loss = self.general_epoch_end(outputs, 'train')
-        
-        return {'train_avg_loss': avg_loss}
     
     def validation_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'val')
-        
-        return {'val_loss': loss}
-    
-    def validation_epoch_end(self, outputs):
-        avg_loss = self.general_epoch_end(outputs, 'val')
-        
-        print(f'Val-Loss: {avg_loss:.4f}')
-        
-        tensorboard_logs = {'val_avg_loss': avg_loss}
-        
-        return {'val_avg_loss': avg_loss, 'log': tensorboard_logs}
+        self.log('val_loss', loss, prog_bar= True, logger = True)
+        return loss
     
     def test_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'test')
-        
-        return {'test_loss': loss}
+        self.log('test_loss', loss, prog_bar= True, logger= True)
+        return loss
     
-    def test_epoch_end(self, outputs):
-        avg_loss = self.general_epoch_end(outputs, 'test')
-     
-        return {'test_avg_loss': avg_loss}
     
     def prepare_data(self):
         self.datasets = dict()
