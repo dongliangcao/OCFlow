@@ -8,6 +8,8 @@ from torch.optim import Adam
 
 from models.data.datasets import ImgFlowOccFromFolder
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
+from models.networks.occlusion_net_s import OcclusionNetS
+from models.networks.occlusion_net_c import OcclusionNetC
 from models.networks.warping_layer import Warping
 from torchvision import transforms
 
@@ -19,7 +21,15 @@ class OcclusionModel(pl.LightningModule):
         super().__init__()
         self.root = root
         self.hparams = hparams
-        self.model = SimpleOcclusionNet()
+        model = self.hparams.get('model', 'simple')
+        if model == 'simple':
+            self.model = SimpleOcclusionNet()
+        elif model == 'occnets':
+            self.model = OcclusionNetS()
+        elif model == 'occnetc':
+            self.model = OcclusionNetC()
+        else:
+            raise ValueError(f'Unsupported model: {model}')
         
     def forward(self, x):
         out = self.model(x)
