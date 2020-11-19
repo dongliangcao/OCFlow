@@ -110,18 +110,15 @@ class FlowOccModel(pl.LightningModule):
         self.datasets['train'] = train_dset
         self.datasets['val'] = val_dset
         self.datasets['test'] = test_dset
-        
-    @pl.data_loader
+    
     def train_dataloader(self):
         batch_size = self.hparams['batch_size']
         return DataLoader(self.datasets['train'], shuffle=True, batch_size=batch_size)
     
-    @pl.data_loader
     def val_dataloader(self):
         batch_size = self.hparams['batch_size']
         return DataLoader(self.datasets['val'], shuffle=False, batch_size=batch_size)
     
-    @pl.data_loader
     def test_dataloader(self):
         batch_size = self.hparams['batch_size']
         return DataLoader(self.datasets['test'], shuffle=False, batch_size=batch_size)
