@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torch import nn, cuda
-from torch.autograd import Variable     
+from torch import nn
+from torch.nn import init  
 
 class Downsample(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, normalize=True):
@@ -63,6 +63,17 @@ class SceneCompletionNet(nn.Module):
         self.up6 = Upsample(128+64, 64, 3) # skip-connected with output from down1
         self.up7 = Upsample(64+in_channels, in_channels, 3, activation=False) # skip-connected with output from input
         self.tanh = nn.Tanh()
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
+
+            if isinstance(m, nn.ConvTranspose2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
         
     def forward(self, img):
         # encoder
