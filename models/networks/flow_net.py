@@ -48,6 +48,17 @@ class FlowNet(nn.Module):
             self.opticalflow_estimators.append(OpticalFlowEstimator(d, level=l, highest_resolution=(l==2)))
         self.context_network = ContextNetwork(34)
         self.upsample = nn.Upsample(scale_factor=4, mode='bilinear')
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
+
+            if isinstance(m, nn.ConvTranspose2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
     
     def warp(self, img, flow):
         """
