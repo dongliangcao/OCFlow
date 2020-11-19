@@ -7,12 +7,12 @@ import math
 import numpy as np
 
 
-class FlowNetS(nn.Module):
+class FlowOccNetS(nn.Module):
     """
     optical flow/occlusion predicion network, structure similar to flownet-s
     """
     def __init__(self, input_channels = 6, batchNorm=True):
-        super(FlowNetS,self).__init__()
+        super(FlowOccNetS,self).__init__()
 
         self.batchNorm = batchNorm
         # convolution part
@@ -29,9 +29,9 @@ class FlowNetS(nn.Module):
         
         # deconv part
         self.deconv5 = deconv(1024,512)
-        self.deconv4 = deconv(1026,256)
-        self.deconv3 = deconv(770,128)
-        self.deconv2 = deconv(386,64)
+        self.deconv4 = deconv(1027,256)
+        self.deconv3 = deconv(771,128)
+        self.deconv2 = deconv(387,64)
 
         # flow prediction part
         self.predict_flow6 = predict_flow(1024)

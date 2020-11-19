@@ -8,7 +8,7 @@ class SimpleFlowOccNet(nn.Module):
     A simple optical flow/occlusion prediction network take the input as concatenated image pairs and predict optical flow/ occlusion map
     """
     def __init__(self, input_channels = 6, batchNorm=True):
-        super(SimpleFlowNet,self).__init__()
+        super(SimpleFlowOccNet,self).__init__()
 
         self.batchNorm = batchNorm
         self.conv1   = conv(self.batchNorm,  input_channels, 64, kernel_size=7, stride=2)
@@ -28,7 +28,7 @@ class SimpleFlowOccNet(nn.Module):
         self.deconv2 = deconv(128,64)
         
         self.predict_flow2 = predict_flow(64)
-        self.predict_occ2 = predict_occ(64)
+        self.predict_occ2 = predict_occlusion(64)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

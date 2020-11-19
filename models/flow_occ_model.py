@@ -12,7 +12,6 @@ from models.networks.flow_occ_net_s import FlowOccNetS
 from models.networks.flow_occ_net_c import FlowOccNetC
 from models.networks.cost_volume_flow_occ_net import FlowOccNetCV
 from models.networks.flow_occ_net import FlowOccNet
-from models.networks.warping_layer import Warping
 from torchvision import transforms
 
 import os

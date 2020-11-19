@@ -6,10 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn import init
+
 class OpticalFlowEstimator(nn.Module): 
-    """
-    Network for predicting optical flow from cost volumes of masked, warped feature of second frame and feature of first frame. 
-    """
     def __init__(self, input_channels, level, highest_resolution = False):
         super(OpticalFlowEstimator, self).__init__()
         self.highest_res = highest_resolution
@@ -48,6 +47,17 @@ class FlowNet(nn.Module):
             self.opticalflow_estimators.append(OpticalFlowEstimator(d, level=l, highest_resolution=(l==2)))
         self.context_network = ContextNetwork(34)
         self.upsample = nn.Upsample(scale_factor=4, mode='bilinear')
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
+
+            if isinstance(m, nn.ConvTranspose2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
     
     def warp(self, img, flow):
         """

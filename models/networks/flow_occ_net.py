@@ -6,10 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn import init
+
 class OpticalFlowEstimator(nn.Module): 
-    """
-    Network for predicting optical flow from cost volumes of masked, warped feature of second frame and feature of first frame. 
-    """
     def __init__(self, input_channels, level, highest_resolution = False):
         super(OpticalFlowEstimator, self).__init__()
         self.highest_res = highest_resolution
@@ -50,6 +49,7 @@ class OcclusionEstimator(nn.Module):
 
         self.upconv1 = nn.ConvTranspose2d(16, 1, 3, 2, 1)
         self.upconv2 = nn.ConvTranspose2d(1, 1, 3, 2, 1)
+    
     def forward(self, features, h_up =None, w_up = None):
         c1 = F.leaky_relu(self.conv1(features), negative_slope= 0.1)
         c2 = F.leaky_relu(self.conv2(c1), negative_slope= 0.1)
@@ -84,7 +84,19 @@ class FlowOccNet(nn.Module):
         # residual flow estimator
         self.context_network = ContextNetwork(34)
         # upsampler
-        self.upsample = nn.Upsample(scale_factor=4, mode='bilinear')
+        self.upsample1 = nn.Upsample(scale_factor=4, mode='bilinear')
+        self.upsample2 = nn.Upsample(scale_factor=4, mode='bilinear')
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
+
+            if isinstance(m, nn.ConvTranspose2d):
+                if m.bias is not None:
+                    init.uniform_(m.bias)
+                init.xavier_uniform_(m.weight)
     
     def warp(self, img, flow):
         """
@@ -177,8 +189,8 @@ class FlowOccNet(nn.Module):
         refined_flow = flow + residual_flow
 
 
-        predicted_flow = self.upsample(refined_flow)
-        predicted_occ = self.upsample(occ)
+        predicted_flow = self.upsample1(refined_flow)
+        predicted_occ = self.upsample2(occ)
         return predicted_flow, predicted_occ 
 
 
