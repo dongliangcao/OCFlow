@@ -1,4 +1,4 @@
-from models.networks.flow_occ_net import CostVolumeLayer
+from models.networks.cost_volume_net import CostVolumeLayer
 
 import torch
 import torch.nn as nn

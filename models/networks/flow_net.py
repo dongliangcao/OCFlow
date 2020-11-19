@@ -1,10 +1,41 @@
 from models.networks.feature_pyramid_net import FeaturePyramidNet
-from models.networks.flow_occ_net import OpticalFlowEstimator, CostVolumeLayer
+from models.networks.cost_volume_net import CostVolumeLayer
 from models.networks.context_net import ContextNetwork
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+class OpticalFlowEstimator(nn.Module): 
+    """
+    Network for predicting optical flow from cost volumes of masked, warped feature of second frame and feature of first frame. 
+    """
+    def __init__(self, input_channels, level, highest_resolution = False):
+        super(OpticalFlowEstimator, self).__init__()
+        self.highest_res = highest_resolution
+        self.conv1 = nn.Conv2d(input_channels, 128, 3, 1, 1)
+        self.conv2 = nn.Conv2d(128, 128, 3, 1, 1)
+        self.conv3 = nn.Conv2d(128, 96, 3, 1, 1)
+        self.conv4 = nn.Conv2d(96, 64, 3, 1, 1)
+        self.conv5 = nn.Conv2d(64, 32, 3, 1, 1)
+        self.conv6 = nn.Conv2d(32,2, 3, 1, 1)
+
+        self.upconv1 = nn.ConvTranspose2d(2, 2, 3, 2, 1)
+        self.upconv2 = nn.ConvTranspose2d(32, 2, 3, 2, 1)
+
+    def forward(self, x, h_up =None, w_up = None): 
+        c1 = F.leaky_relu(self.conv1(x), negative_slope= 0.1)
+        c2 = F.leaky_relu(self.conv2(c1), negative_slope= 0.1)
+        c3 = F.leaky_relu(self.conv3(c2), negative_slope= 0.1)
+        c4 = F.leaky_relu(self.conv4(c3), negative_slope= 0.1)
+        feat = F.leaky_relu(self.conv5(c4), negative_slope=0.1)
+        flow = self.conv6(feat)
+        if self.highest_res: 
+            return (flow, feat)
+        else: 
+            flow_up = self.upconv1(flow, output_size = (h_up, w_up)) #(2,6,20)
+            feature_up = self.upconv2(feat, output_size = (h_up, w_up))
+            return(flow, flow_up, feature_up)
 
 class FlowNet(nn.Module):
     """optical flow prediction network"""
@@ -57,7 +88,7 @@ class FlowNet(nn.Module):
         pyramid_im1 = self.feature_pyramid_network(im1)
         pyramid_im2 = self.feature_pyramid_network(im2)
         
-        up_flow, up_feature = None, None
+        flow_up, flow_feature_up = None, None
         feature, flow = None, None
         
         for i, (feat1, feat2) in enumerate(zip(pyramid_im1, pyramid_im2)):
@@ -71,20 +102,20 @@ class FlowNet(nn.Module):
             if first_iteration:
                 warped2 = feat2
             else:
-                flow_displacement = up_flow * 20.0 / (2.0 ** level) #flow has size Bx2xHxW
+                flow_displacement = flow_up * 20.0 / (2.0 ** level) #flow has size Bx2xHxW
                 warped2 = self.warp(feat2, flow_displacement)
             corr = self.correlation_layer(feat1, warped2)
             
-            input_list = [corr, feat1]
+            flow_input = [corr, feat1]
             if not first_iteration:
-                input_list.append(up_flow)
-                input_list.append(up_feature)
-            estimator_input = torch.cat(input_list, dim=1)
+                flow_input.append(flow_up)
+                flow_input.append(flow_feature_up)
+            flow_input = torch.cat(flow_input, dim=1)
             
             if last_iteration:
-                feature, flow = self.opticalflow_estimators[i](estimator_input)
+                flow, feature = self.opticalflow_estimators[i](flow_input)
             else:
-                flow, up_flow, up_feature = self.opticalflow_estimators[i](estimator_input, h_up, w_up)
+                flow, flow_up, flow_feature_up = self.opticalflow_estimators[i](flow_input, h_up, w_up)
             
         residual_flow = self.context_network(torch.cat([feature, flow], dim=1))
         refined_flow = flow + residual_flow

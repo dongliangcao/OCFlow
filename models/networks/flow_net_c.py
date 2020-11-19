@@ -6,7 +6,7 @@ from torch.nn import init
 import math
 import numpy as np
 
-from models.networks.flow_occ_net import CostVolumeLayer
+from models.networks.cost_volume_net import CostVolumeLayer
 
 class FlowNetC(nn.Module):
     def __init__(self, batchNorm=True):
