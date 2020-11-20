@@ -22,6 +22,7 @@ class FlowModel(pl.LightningModule):
         super().__init__()
         self.root = root
         self.hparams = hparams
+        self.lr = hparams['learning_rate']
         model = self.hparams.get('model', 'simple')
         if model == 'simple':
             self.model = SimpleFlowNet()
@@ -77,5 +78,5 @@ class FlowModel(pl.LightningModule):
         return loss
     
     def configure_optimizers(self):
-        return Adam(self.model.parameters(), self.hparams['learning_rate'])
+        return Adam(self.parameters(), self.lr)
         

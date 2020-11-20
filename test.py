@@ -4,6 +4,7 @@ from models.flow_model import FlowModel
 from models.occlusion_model import OcclusionModel
 from models.flow_occ_model import FlowOccModel
 from models.networks.lightning_datamodule import ImageFlowOccModule
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import argparse
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
 # optical flow model should be ['simple', 'flownets', 'flownetc', 'pwc', 'flownet']
@@ -38,8 +39,23 @@ if __name__ == '__main__':
         model = InpaintingModel(root=args.root, hparams=hparams)
     
     max_epochs = args.epochs
+    #specify data module
     data_module = ImageFlowOccModule(root = args.root, image_size= (512,1024), batch_size=args.batch_size)
     data_module.prepare_data()
     data_module.setup()
-    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches = 1)
+    #specify early stopping
+    early_stop_callback = EarlyStopping(monitor='val_loss',
+    min_delta=0.00,
+    patience=12,
+    verbose=False,
+    mode='min')
+    #specify Trainer and start training
+    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback])
     trainer.fit(model, datamodule = data_module)
+
+
+    #trainer = pl.Trainer(gpus =1, max_epochs = 50)
+    #lr_finder = trainer.tuner.lr_find(model, datamodule = data_module)
+    #fig = lr_finder.plot(); fig.show()
+    #suggested_lr = lr_finder.suggestion()
+    #print(suggested_lr)
