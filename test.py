@@ -3,7 +3,7 @@ from models.inpainting_model import InpaintingModel
 from models.flow_model import FlowModel
 from models.occlusion_model import OcclusionModel
 from models.flow_occ_model import FlowOccModel
-
+from models.networks.lightning_datamodule import ImageFlowOccModule
 import argparse
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
 # optical flow model should be ['simple', 'flownets', 'flownetc', 'pwc', 'flownet']
@@ -38,5 +38,8 @@ if __name__ == '__main__':
         model = InpaintingModel(root=args.root, hparams=hparams)
     
     max_epochs = args.epochs
-    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1)
-    trainer.fit(model)
+    data_module = ImageFlowOccModule(root = args.root, image_size= (512,1024), batch_size=args.batch_size)
+    data_module.prepare_data()
+    data_module.setup()
+    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches = 1)
+    trainer.fit(model, datamodule = data_module)

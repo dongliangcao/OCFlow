@@ -76,31 +76,6 @@ class FlowModel(pl.LightningModule):
         self.log('test_loss', loss, prog_bar= True, logger= True)
         return loss
     
-    
-    def prepare_data(self):
-        self.datasets = dict()
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
-        ])
-        dataset = ImgFlowOccFromFolder(root=self.root, transform=transform, resize=transforms.Resize(self.hparams['image_size']), stack_imgs=False)
-        train_dset, val_dset, test_dset = random_split(dataset, [ceil(len(dataset)*0.8), ceil(len(dataset)*0.1), len(dataset) - ceil(len(dataset)*0.8) - ceil(len(dataset)*0.1)])
-        self.datasets['train'] = train_dset
-        self.datasets['val'] = val_dset
-        self.datasets['test'] = test_dset
-        
-    def train_dataloader(self):
-        batch_size = self.hparams['batch_size']
-        return DataLoader(self.datasets['train'], shuffle=True, batch_size=batch_size)
-    
-    def val_dataloader(self):
-        batch_size = self.hparams['batch_size']
-        return DataLoader(self.datasets['val'], shuffle=False, batch_size=batch_size)
-    
-    def test_dataloader(self):
-        batch_size = self.hparams['batch_size']
-        return DataLoader(self.datasets['test'], shuffle=False, batch_size=batch_size)
-    
     def configure_optimizers(self):
         return Adam(self.model.parameters(), self.hparams['learning_rate'])
         
