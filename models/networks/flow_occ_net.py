@@ -88,15 +88,10 @@ class FlowOccNet(nn.Module):
         self.upsample2 = nn.Upsample(scale_factor=4, mode='bilinear')
         
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
                 if m.bias is not None:
-                    init.uniform_(m.bias)
-                init.xavier_uniform_(m.weight)
-
-            if isinstance(m, nn.ConvTranspose2d):
-                if m.bias is not None:
-                    init.uniform_(m.bias)
-                init.xavier_uniform_(m.weight)
+                    m.bias.data.zero_()
     
     def warp(self, img, flow):
         """

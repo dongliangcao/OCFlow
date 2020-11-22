@@ -69,7 +69,6 @@ class FlowNetC(nn.Module):
 
         # FlownetC bottom input stream
         out_conv1b = self.conv1(x2)
-        
         out_conv2b = self.conv2(out_conv1b)
         out_conv3b = self.conv3(out_conv2b)
 
