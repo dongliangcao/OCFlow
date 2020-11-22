@@ -27,7 +27,7 @@ if __name__ == '__main__':
     network_type = args.network_type
     assert network_type in ['flow', 'occ', 'flow-occ', 'inpainting'], 'Unknown network type'
     if network_type == 'flow':
-        assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet']
+        assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']
         model = FlowModel(root=args.root, hparams=hparams)
     elif network_type == 'occ':
         assert hparams['model'] in ['simple', 'occnets', 'occnetc']
@@ -46,16 +46,16 @@ if __name__ == '__main__':
     #specify early stopping
     early_stop_callback = EarlyStopping(monitor='val_loss',
     min_delta=0.00,
-    patience=12,
+    patience=30,
     verbose=False,
     mode='min')
     #specify Trainer and start training
-    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback])
+    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=1)
     trainer.fit(model, datamodule = data_module)
 
 
     #trainer = pl.Trainer(gpus =1, max_epochs = 50)
-    #lr_finder = trainer.tuner.lr_find(model, datamodule = data_module)
+    #lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None)
     #fig = lr_finder.plot(); fig.show()
     #suggested_lr = lr_finder.suggestion()
     #print(suggested_lr)
