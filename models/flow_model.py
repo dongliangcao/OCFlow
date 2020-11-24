@@ -19,9 +19,8 @@ import os
 from math import ceil
 
 class FlowModel(pl.LightningModule):
-    def __init__(self, root, hparams):
+    def __init__(self, hparams):
         super().__init__()
-        self.root = root
         self.hparams = hparams
         self.lr = hparams['learning_rate']
         model = self.hparams.get('model', 'simple')
@@ -56,9 +55,10 @@ class FlowModel(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        imgs, flow, _ = batch
+        imgs, flow = batch
         #imgs, flow = imgs.to(self.device), flow.to(self.device)
-        
+        #print(imgs.shape)
+        #print(flow.shape)
         flow_pred = self.model(imgs)
         
         loss = F.l1_loss(flow_pred, flow)

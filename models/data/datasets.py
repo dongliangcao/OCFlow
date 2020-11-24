@@ -51,7 +51,7 @@ class StaticCenterCrop:
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
     
 class MpiSintel(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, resize = 'None', stack_imgs=True):
 #         self.is_cropped = is_cropped
 #         self.is_rescaled = is_rescaled
 #         if self.is_cropped:
@@ -60,11 +60,14 @@ class MpiSintel(Dataset):
 #             self.crop_size = crop_size
         self.transform = transform
         self.replicates = replicates
+        self.resize =resize
+        self.stack_imgs = stack_imgs
         
         flow_root = join(root, 'flow')
         image_root = join(root, dstype)
         
         file_list = sorted(glob(join(flow_root, '*/*.flo')))
+        print(file_list)
         
         self.flow_list = []
         self.image_list = []
@@ -86,6 +89,8 @@ class MpiSintel(Dataset):
         assert (len(self.image_list) == len(self.flow_list)), 'number of image pairs shoule be equal to number of flows'
         
         self.size = len(self.image_list)
+        #print(self.image_list)
+
         self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
         
         if (self.render_size[0] % 64) or (self.render_size[1] % 64):
@@ -111,12 +116,20 @@ class MpiSintel(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
-            images = torch.stack([img1, img2])
+            if self.resize:
+                img1 = self.resize(img1)
+                img2 = self.resize(img2)
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
 
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
+            if self.resize: 
+                flow = self.resize(flow)
 
             return images, flow #size [2,C,H,W]
     
@@ -124,12 +137,12 @@ class MpiSintel(Dataset):
         return self.size * self.replicates
     
 class MpiSintelClean(MpiSintel):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
-        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, resize =None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, resize = resize, stack_imgs=stack_imgs)
 
 class MpiSintelFinal(MpiSintel):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
-        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, resize = None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, resize = resize, stack_imgs= stack_imgs)
     
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):

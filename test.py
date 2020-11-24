@@ -3,7 +3,7 @@ from models.inpainting_model import InpaintingModel
 from models.flow_model import FlowModel
 from models.occlusion_model import OcclusionModel
 from models.flow_occ_model import FlowOccModel
-from models.networks.lightning_datamodule import ImageFlowOccModule
+from models.networks.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import argparse
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
@@ -18,29 +18,31 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, help='Epochs to train', default=100)
     parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
     parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3)
+    parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
     parser.add_argument('--root', type=str, help='Data root')
+    parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0.0)
                         
     args = parser.parse_args()
     
-    hparams = dict(learning_rate=args.learning_rate, batch_size=args.batch_size, image_size=(512, 1024), model=args.model)
+    hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate)
     
     network_type = args.network_type
     assert network_type in ['flow', 'occ', 'flow-occ', 'inpainting'], 'Unknown network type'
     if network_type == 'flow':
         assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']
-        model = FlowModel(root=args.root, hparams=hparams)
+        model = FlowModel(hparams=hparams)
     elif network_type == 'occ':
         assert hparams['model'] in ['simple', 'occnets', 'occnetc']
-        model = OcclusionModel(root=args.root, hparams=hparams)
+        model = OcclusionModel(hparams=hparams)
     elif network_type == 'flow-occ':
         assert hparams['model'] in ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
-        model = FlowOccModel(root=args.root, hparams=hparams)
+        model = FlowOccModel(hparams=hparams)
     else:
-        model = InpaintingModel(root=args.root, hparams=hparams)
+        model = InpaintingModel(hparams=hparams)
     
     max_epochs = args.epochs
     #specify data module
-    data_module = ImageFlowOccModule(root = args.root, image_size= (512,1024), batch_size=args.batch_size)
+    data_module = DatasetModule(root = args.root, image_size= (32,32), batch_size=args.batch_size, dataset_name = args.dataset_name)
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping
@@ -50,11 +52,11 @@ if __name__ == '__main__':
     verbose=False,
     mode='min')
     #specify Trainer and start training
-    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=1)
+    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=args.overfit_batches)
     trainer.fit(model, datamodule = data_module)
 
 
-    #trainer = pl.Trainer(gpus =1, max_epochs = 50)
+    #trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)
     #lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None)
     #fig = lr_finder.plot(); fig.show()
     #suggested_lr = lr_finder.suggestion()
