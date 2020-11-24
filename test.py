@@ -21,6 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
     parser.add_argument('--root', type=str, help='Data root')
     parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0.0)
+    parser.add_argument('--find_best_lr', action = 'store_true', help='Use Trainer to find the best learning')
                         
     args = parser.parse_args()
     
@@ -46,18 +47,18 @@ if __name__ == '__main__':
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping
-    early_stop_callback = EarlyStopping(monitor='val_loss',
+    early_stop_callback = EarlyStopping(monitor='train_loss',
     min_delta=0.00,
-    patience=30,
+    patience=50,
     verbose=False,
     mode='min')
+    
     #specify Trainer and start training
-    trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=args.overfit_batches)
-    trainer.fit(model, datamodule = data_module)
-
-
-    #trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)
-    #lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None)
-    #fig = lr_finder.plot(); fig.show()
-    #suggested_lr = lr_finder.suggestion()
-    #print(suggested_lr)
+    if not args.find_best_lr: 
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=args.overfit_batches)
+        trainer.fit(model, datamodule = data_module)
+    else: 
+        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)
+        lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None)
+        suggested_lr = lr_finder.suggestion()
+        print(suggested_lr)

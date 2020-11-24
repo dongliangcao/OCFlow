@@ -67,8 +67,7 @@ class MpiSintel(Dataset):
         image_root = join(root, dstype)
         
         file_list = sorted(glob(join(flow_root, '*/*.flo')))
-        print(file_list)
-        
+
         self.flow_list = []
         self.image_list = []
         
