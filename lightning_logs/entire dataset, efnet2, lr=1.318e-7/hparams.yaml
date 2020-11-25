@@ -1,0 +1,5 @@
+batch_size: 32
+epochs: 300
+learning_rate: 1.3183e-07
+model: eflownet2
+network_type: flow

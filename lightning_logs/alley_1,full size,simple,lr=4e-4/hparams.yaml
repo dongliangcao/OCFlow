@@ -1,0 +1,5 @@
+batch_size: 32
+epochs: 400
+learning_rate: 0.0003981
+model: simple
+network_type: flow
