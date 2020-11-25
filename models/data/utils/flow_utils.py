@@ -117,7 +117,7 @@ def read_pfm_file(file):
     return data  #, scale
 
 
-def resize_flow(flow, des_width, des_height, method='bilinear'):
+def resize_flow(flow, des_height, des_width, method='bilinear'):
     # improper for sparse flow
     src_height = flow.shape[0]
     src_width = flow.shape[1]

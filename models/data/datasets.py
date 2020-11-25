@@ -10,6 +10,7 @@ from glob import glob
 from .utils import frame_utils
 
 from imageio import imread
+from models.data.utils.flow_utils import resize_flow
 
 class RescaleTransform:
     """Transform class to rescale images to a given range"""
@@ -51,7 +52,7 @@ class StaticCenterCrop:
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
     
 class MpiSintel(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, resize = 'None', stack_imgs=True):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size = 'None', stack_imgs=True):
 #         self.is_cropped = is_cropped
 #         self.is_rescaled = is_rescaled
 #         if self.is_cropped:
@@ -60,14 +61,13 @@ class MpiSintel(Dataset):
 #             self.crop_size = crop_size
         self.transform = transform
         self.replicates = replicates
-        self.resize =resize
+        self.image_size =image_size
         self.stack_imgs = stack_imgs
         
         flow_root = join(root, 'flow')
         image_root = join(root, dstype)
         
         file_list = sorted(glob(join(flow_root, '*/*.flo')))
-
         self.flow_list = []
         self.image_list = []
         
@@ -115,9 +115,10 @@ class MpiSintel(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
-            if self.resize:
-                img1 = self.resize(img1)
-                img2 = self.resize(img2)
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -125,26 +126,27 @@ class MpiSintel(Dataset):
 
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
+            if self.image_size: 
+                flow = resize_flow(flow, self.image_size[0], self.image_size[1])
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
-            if self.resize: 
-                flow = self.resize(flow)
-
+            
+            
             return images, flow #size [2,C,H,W]
     
     def __len__(self):
         return self.size * self.replicates
     
 class MpiSintelClean(MpiSintel):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, resize =None, stack_imgs=True):
-        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, resize = resize, stack_imgs=stack_imgs)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size = image_size, stack_imgs=stack_imgs)
 
 class MpiSintelFinal(MpiSintel):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, resize = None, stack_imgs=True):
-        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, resize = resize, stack_imgs= stack_imgs)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size = None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size = image_size, stack_imgs= stack_imgs)
     
 class FlyingChairs(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
 #         self.is_cropped = is_cropped
 #         self.is_rescaled = is_rescaled
 #         if self.is_cropped:
@@ -193,10 +195,20 @@ class FlyingChairs(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
-            images = torch.stack([img1, img2])
+
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
 
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
+            if self.image_size: 
+                flow = resize_flow(flow, self.image_size[0], self.image_size[1])
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
 
@@ -206,7 +218,7 @@ class FlyingChairs(Dataset):
         return self.size * self.replicates 
     
 class ImagesFromFolder(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1, stack_imgs=True):
+    def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1, stack_imgs=True, image_size = None):
         self.transform = transform
         self.replicates = replicates
         self.stack_imgs = stack_imgs
@@ -242,6 +254,10 @@ class ImagesFromFolder(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -253,9 +269,9 @@ class ImagesFromFolder(Dataset):
         return self.size * self.replicates
 
 class ImgFlowOccFromFolder(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), resize=None, root='', iext='png', replicates=1, stack_imgs=True):
+    def __init__(self, transform=transforms.ToTensor(), image_size=None, root='', iext='png', replicates=1, stack_imgs=True):
         self.transform = transform
-        self.resize = resize
+        self.image_size = image_size
         self.replicates = replicates
         self.stack_imgs = stack_imgs
         
@@ -291,9 +307,10 @@ class ImgFlowOccFromFolder(Dataset):
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
-            if self.resize:
-                img1 = self.resize(img1)
-                img2 = self.resize(img2)
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -301,17 +318,17 @@ class ImgFlowOccFromFolder(Dataset):
             
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
+            if self.image_size: 
+                flow = resize_flow(flow, self.image_size[0], self.image_size[1])
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
-            if self.resize:
-                flow = self.resize(flow)
 
             occlusion = frame_utils.read_gen(self.occlusion_list[index]).astype(np.float32)
             occlusion = cropper(occlusion)
             occlusion = occlusion.transpose(2, 0, 1)
             occlusion = torch.from_numpy(occlusion)
-            if self.resize:
-                occlusion = self.resize(occlusion)
+            if self.image_size:
+                occlusion = resize(occlusion)
             return images, flow, occlusion
         
     def __len__(self):
