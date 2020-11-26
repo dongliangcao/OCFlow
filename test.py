@@ -43,7 +43,7 @@ if __name__ == '__main__':
     
     max_epochs = args.epochs
     #specify data module
-    data_module = DatasetModule(root = args.root, image_size= (32,32), batch_size=args.batch_size, dataset_name = args.dataset_name)
+    data_module = DatasetModule(root = args.root, batch_size=args.batch_size, dataset_name = args.dataset_name)
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping
