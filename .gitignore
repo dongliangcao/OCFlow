@@ -130,3 +130,6 @@ dmypy.json
 
 # Lightning logs
 lightning_logs/
+
+# Jupyter notebook
+*.ipynb

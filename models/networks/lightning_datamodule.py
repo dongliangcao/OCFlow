@@ -21,8 +21,14 @@ class DatasetModule(pl.LightningDataModule):
             dataset = MpiSintelClean(root = self.root, transform = transform, image_size = self.image_size, stack_imgs=False)
         elif self.dataset_name =='MpiSintelFinal': 
             dataset = MpiSintelFinal(root = self.root, transform = transform, image_size = self.image_size, stack_imgs=False)
-        train_dset, val_dset, test_dset = random_split(dataset, [ceil(len(dataset)*0.8), ceil(len(dataset)*0.1), len(dataset) - ceil(len(dataset)*0.8) - ceil(len(dataset)*0.1)])
+        
+        len_train = ceil(len(dataset)*0.8)
+        len_val =ceil(len(dataset)*0.1)
 
+        train_dset = dataset[:len_train]
+        val_dset = dataset[len_train: len_train + len_val]
+        test_dset = dataset[len_train + len_val:]
+        
         self.datasets['train'] = train_dset
         self.datasets['val'] = val_dset
         self.datasets['test'] = test_dset
