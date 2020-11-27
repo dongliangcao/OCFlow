@@ -303,6 +303,22 @@ def evaluate_kitti_flow(gt_flow, pred_flow, rigid_flow=None):
                                     gt_flow[:, :, 2])
     return (epe, acc)
 
+def calculate_average_epe(dataloader, model):
+    loss = 0.0
+    count = 0
+    for (imgs, flow) in dataloader:
+        model.eval()
+        predicted_flow = model(imgs)
+        for i in range(imgs.shape[0]):
+            img1, img2 = imgs[i, 0:3, :, :], imgs[i, 3:6, :, :]
+            img1 = img1.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+            img2 = img2.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+            flow = flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+            predicted_flow = predicted_flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+            loss += evaluate_flow(flow, predicted_flow)
+            count += 1
+    return loss / count
+
 def horizontal_flip_flow(flow):
     flow = np.copy(np.fliplr(flow))
     flow[:, :, 0] *= -1
