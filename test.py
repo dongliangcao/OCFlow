@@ -20,7 +20,7 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3)
     parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
     parser.add_argument('--root', type=str, help='Data root')
-    parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0.0)
+    parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0)
     parser.add_argument('--find_best_lr', action = 'store_true', help='Use Trainer to find the best learning')
                         
     args = parser.parse_args()
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping
-    early_stop_callback = EarlyStopping(monitor='train_loss',
+    early_stop_callback = EarlyStopping(monitor='val_loss',
     min_delta=0.00,
     patience=50,
     verbose=False,
