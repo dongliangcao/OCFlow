@@ -310,9 +310,6 @@ def calculate_average_epe(dataloader, model):
         model.eval()
         predicted_flow = model(imgs)
         for i in range(imgs.shape[0]):
-            img1, img2 = imgs[i, 0:3, :, :], imgs[i, 3:6, :, :]
-            img1 = img1.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
-            img2 = img2.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
             flow = flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
             predicted_flow = predicted_flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
             loss += evaluate_flow(flow, predicted_flow)
