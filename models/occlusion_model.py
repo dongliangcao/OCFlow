@@ -3,10 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split
+
 from torch.optim import Adam
 
-from models.data.datasets import ImgFlowOccFromFolder
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.occlusion_net_s import OcclusionNetS
 from models.networks.occlusion_net_c import OcclusionNetC
@@ -17,10 +16,10 @@ import os
 from math import ceil
 
 class OcclusionModel(pl.LightningModule):
-    def __init__(self, root, hparams):
+    def __init__(self, hparams):
         super().__init__()
-        self.root = root
         self.hparams = hparams
+        self.lr = hparams['learning_rate']
         model = self.hparams.get('model', 'simple')
         if model == 'simple':
             self.model = SimpleOcclusionNet()
@@ -40,20 +39,16 @@ class OcclusionModel(pl.LightningModule):
     def is_cuda(self):
         return next(self.parameters()).is_cuda
     
-    
     def save_state_dict(self, path):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        imgs, _, occ = batch
-        #imgs, occ = imgs.to(self.device), occ.to(self.device)
-        
+        imgs, occ = batch
         occ_pred = self.forward(imgs)
         
         loss = F.binary_cross_entropy(occ_pred, occ)
         
         return loss
-    
     
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'train')
@@ -64,7 +59,6 @@ class OcclusionModel(pl.LightningModule):
         loss = self.general_step(batch, batch_idx, 'val')
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
-    
     
     def test_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'test')

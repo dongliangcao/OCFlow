@@ -3,7 +3,7 @@ from models.inpainting_model import InpaintingModel
 from models.flow_model import FlowModel
 from models.occlusion_model import OcclusionModel
 from models.flow_occ_model import FlowOccModel
-from models.networks.lightning_datamodule import DatasetModule
+from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import argparse
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
@@ -43,7 +43,9 @@ if __name__ == '__main__':
     
     max_epochs = args.epochs
     #specify data module
-    data_module = DatasetModule(root = args.root, batch_size=args.batch_size, dataset_name = args.dataset_name)
+    dataset_name = args.dataset_name
+    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc']
+    data_module = DatasetModule(root=args.root, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping

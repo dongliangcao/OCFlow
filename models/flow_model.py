@@ -3,10 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split
+
 from torch.optim import Adam
 
-from models.data.datasets import ImgFlowOccFromFolder
 from models.networks.simple_flow_net import SimpleFlowNet
 from models.networks.flow_net_s import FlowNetS
 from models.networks.flow_net_c import FlowNetC
@@ -56,9 +55,6 @@ class FlowModel(pl.LightningModule):
         
     def general_step(self, batch, batch_idx, mode):
         imgs, flow = batch
-        #imgs, flow = imgs.to(self.device), flow.to(self.device)
-        #print(imgs.shape)
-        #print(flow.shape)
         flow_pred = self.model(imgs)
         
         loss = F.l1_loss(flow_pred, flow)

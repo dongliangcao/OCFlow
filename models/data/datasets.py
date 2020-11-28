@@ -52,13 +52,7 @@ class StaticCenterCrop:
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
     
 class MpiSintel(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size = 'None', stack_imgs=True):
-#         self.is_cropped = is_cropped
-#         self.is_rescaled = is_rescaled
-#         if self.is_cropped:
-#             if not crop_size:
-#                 raise ValueError('crop_size should be given.')
-#             self.crop_size = crop_size
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size =None, stack_imgs=True):
         self.transform = transform
         self.replicates = replicates
         self.image_size =image_size
@@ -132,7 +126,7 @@ class MpiSintel(Dataset):
             flow = torch.from_numpy(flow)
             
             
-            return images, flow #size [2,C,H,W]
+            return images, flow
     
     def __len__(self):
         return self.size * self.replicates
@@ -144,15 +138,98 @@ class MpiSintelClean(MpiSintel):
 class MpiSintelFinal(MpiSintel):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size = None, stack_imgs=True):
         super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size = image_size, stack_imgs= stack_imgs)
+
+class MpiSintelOcc(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, stack_imgs=True):
+        self.transform = transform
+        self.replicates = replicates
+        self.image_size =image_size
+        self.stack_imgs = stack_imgs
+        
+        occ_root = join(root, 'occlusions')
+        image_root = join(root, dstype)
+        
+        file_list = sorted(glob(join(occ_root, '*/*.png')))
+        self.occ_list = []
+        self.image_list = []
+        
+        for file in file_list:
+            fbase = file[len(occ_root)+1:]
+            fprefix = fbase[:-8]
+            fnum = int(fbase[-8:-4])
+            
+            img1 = join(image_root, fprefix + '{:04d}'.format(fnum+0) + '.png')
+            img2 = join(image_root, fprefix + '{:04d}'.format(fnum+1) + '.png')
+            
+            assert isfile(img1), 'Cannot find file: {}'.format(img1)
+            assert isfile(img2), 'Cannot find file: {}'.format(img2)
+            assert isfile(file), 'Cannot find file: {}'.format(file)
+            
+            self.image_list.append([img1, img2])
+            self.occ_list.append(file)
+        assert (len(self.image_list) == len(self.occ_list)), 'number of image pairs shoule be equal to number of occlusions'
+        
+        self.size = len(self.image_list)
+
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            image_size = img1.shape[:2]
+
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
+
+            occ = frame_utils.read_gen(self.occ_list[index]).astype(np.float32)
+            occ = cropper(occ)
+            if self.image_size: 
+                occ = resize_flow(occ, self.image_size[0], self.image_size[1])
+            occ = occ.transpose(2,0,1)
+            occ[occ == 255] = 1 
+            occ = torch.from_numpy(occ)
+            
+            
+            return images, occ
     
+    def __len__(self):
+        return self.size * self.replicates   
+    
+class MpiSintelCleanOcc(MpiSintelOcc):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, stack_imgs=stack_imgs)
+
+class MpiSintelFinalOcc(MpiSintelOcc):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)
+
+
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
-#         self.is_cropped = is_cropped
-#         self.is_rescaled = is_rescaled
-#         if self.is_cropped:
-#             if not crop_size:
-#                 raise ValueError('crop_size should be given.')
-#             self.crop_size = crop_size
         self.transform = transform
         self.replicates = replicates
 
