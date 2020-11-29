@@ -3,22 +3,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split
+
 from torch.optim import Adam
 
-from models.data.datasets import ImgFlowOccFromFolder
-from models.networks.image_inpainting_net import SceneCompletionNet
+from models.networks.image_inpainting_net import InpaintingNet
 from torchvision import transforms
 
 import os
 from math import ceil
 
 class InpaintingModel(pl.LightningModule):
-    def __init__(self, root, hparams):
+    def __init__(self, hparams):
         super().__init__()
-        self.root = root
         self.hparams = hparams
-        self.model = SceneCompletionNet()
+        self.model = InpaintingNet()
         
     def forward(self, x):
         out = self.model(x)

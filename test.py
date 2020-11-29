@@ -44,7 +44,7 @@ if __name__ == '__main__':
     max_epochs = args.epochs
     #specify data module
     dataset_name = args.dataset_name
-    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc']
+    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc']
     data_module = DatasetModule(root=args.root, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
     data_module.setup()

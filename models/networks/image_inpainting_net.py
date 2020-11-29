@@ -2,28 +2,44 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import init  
-
 class Downsample(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride, normalize=True):
+    def __init__(self, in_channels, out_channels, kernel_size=3, proj_ratio=4):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, kernel_size//2, bias=not normalize)
-        self.normalize = nn.BatchNorm2d(out_channels) if normalize else None
-        self.activation = nn.ReLU()
+        inter_channels = in_channels // proj_ratio
+        self.conv1 = nn.Conv2d(in_channels, inter_channels, 2, stride=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(inter_channels)
+        self.lrelu1 = nn.LeakyReLU(0.1)
+        
+        self.conv2 = nn.Conv2d(inter_channels, inter_channels, kernel_size, padding=kernel_size//2, bias=False)
+        self.bn2 = nn.BatchNorm2d(inter_channels)
+        self.lrelu2 = nn.LeakyReLU(0.1)
+        
+        self.conv3 = nn.Conv2d(inter_channels, out_channels, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(out_channels)
+        self.lrelu3 = nn.LeakyReLU(0.1)
         
     def forward(self, x):
-        out = self.conv(x)
-        if self.normalize:
-            out = self.normalize(out)
-        out = self.activation(out)
-        return out
-    
+        x = self.lrelu1(self.bn1(self.conv1(x)))
+        x = self.lrelu2(self.bn2(self.conv2(x)))
+        x = self.lrelu3(self.bn3(self.conv3(x)))
+        return x
+
 class Upsample(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, normalize=True, activation=True):
+    def __init__(self, in_channels, out_channels, proj_ratio=4, activation=True):
         super().__init__()
-        self.up = nn.Upsample(scale_factor=2, mode='nearest')
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, 1, kernel_size//2, bias=not normalize)
-        self.normalize = nn.BatchNorm2d(out_channels) if normalize else None
-        self.activation = nn.LeakyReLU(0.2) if activation else None
+        inter_channels = in_channels // proj_ratio
+        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.conv1 = nn.Conv2d(in_channels, inter_channels, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(inter_channels)
+        self.lrelu1 = nn.LeakyReLU(0.1)
+        
+        self.conv2 = nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(inter_channels)
+        self.lrelu2 = nn.LeakyReLU(0.1)
+        
+        self.conv3 = nn.Conv2d(inter_channels, out_channels, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(out_channels)
+        self.lrelu3 = nn.LeakyReLU(0.1) if activation else nn.Identity()
         
     def forward(self, x1, x2):
         x1 = self.up(x1)
@@ -34,43 +50,33 @@ class Upsample(nn.Module):
         x1 = F.pad(x1, [diffX//2, diffX - diffX//2, diffY//2, diffY - diffY//2])
         x = torch.cat([x2, x1], dim=1)
         
-        out = self.conv(x)
-        if self.normalize:
-            out = self.normalize(out)
-        if self.activation:
-            out = self.activation(out)
-        return out
+        x = self.lrelu1(self.bn1(self.conv1(x)))
+        x = self.lrelu2(self.bn2(self.conv2(x)))
+        x = self.lrelu3(self.bn3(self.conv3(x)))
+        return x
         
-        
-class SceneCompletionNet(nn.Module):
+class InpaintingNet(nn.Module):
     def __init__(self, in_channels=3):
         super().__init__()
         ## Encoder part
-        self.down1 = Downsample(in_channels, 64, 7, 2, normalize=False)
-        self.down2 = Downsample(64, 128, 5, 2)
-        self.down3 = Downsample(128, 256, 5, 2)
-        self.down4 = Downsample(256, 512, 3, 2)
-        self.down5 = Downsample(512, 512, 3, 2)
-        self.down6 = Downsample(512, 512, 3, 2)
-        self.down7 = Downsample(512, 512, 3, 2)
+        self.down1 = Downsample(in_channels, 32, kernel_size=7, proj_ratio=1)
+        self.down2 = Downsample(32, 64, kernel_size=5)
+        self.down3 = Downsample(64, 128, kernel_size=5)
+        self.down4 = Downsample(128, 128)
+        self.down5 = Downsample(128, 128)
+        self.down6 = Downsample(128, 128)
         
         ## Decoder part
-        self.up1 = Upsample(512+512, 512, 3) # skip-connected with output from down6
-        self.up2 = Upsample(512+512, 512, 3) # skip-connected with output from down5
-        self.up3 = Upsample(512+512, 512, 3) # skip-connected with output from down4
-        self.up4 = Upsample(512+256, 256, 3) # skip-connected with output from down3
-        self.up5 = Upsample(256+128, 128, 3) # skip-connected with output from down2
-        self.up6 = Upsample(128+64, 64, 3) # skip-connected with output from down1
-        self.up7 = Upsample(64+in_channels, in_channels, 3, activation=False) # skip-connected with output from input
+        self.up1 = Upsample(128+128, 128, proj_ratio=8) # skip-connected with output from down5
+        self.up2 = Upsample(128+128, 128, proj_ratio=8) # skip-connected with output from down4
+        self.up3 = Upsample(128+128, 128, proj_ratio=8) # skip-connected with output from down3
+        self.up4 = Upsample(128+64, 64) # skip-connected with output from down2
+        self.up5 = Upsample(64+32, 32) # skip-connected with output from down1
+        self.up6 = Upsample(32+in_channels, in_channels, activation=False) # skip-connected with output from input
         self.tanh = nn.Tanh()
         
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                if m.bias is not None:
-                    init.uniform_(m.bias)
-                init.xavier_uniform_(m.weight)
-
-            if isinstance(m, nn.ConvTranspose2d):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
                 if m.bias is not None:
                     init.uniform_(m.bias)
                 init.xavier_uniform_(m.weight)
@@ -83,15 +89,13 @@ class SceneCompletionNet(nn.Module):
         x4 = self.down4(x3)
         x5 = self.down5(x4)
         x6 = self.down6(x5)
-        x7 = self.down7(x6)
         #decoder
-        x = self.up1(x7, x6)
-        x = self.up2(x, x5)
-        x = self.up3(x, x4)
-        x = self.up4(x, x3)
-        x = self.up5(x, x2)
-        x = self.up6(x, x1)
-        x = self.up7(x, img)
+        x = self.up1(x6, x5)
+        x = self.up2(x, x4)
+        x = self.up3(x, x3)
+        x = self.up4(x, x2)
+        x = self.up5(x, x1)
+        x = self.up6(x, img)
         x = self.tanh(x)
         
         return x

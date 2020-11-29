@@ -320,7 +320,15 @@ class MpiSintelFlowOcc(Dataset):
     
     def __len__(self):
         return self.size * self.replicates
-                
+
+class MpiSintelCleanFlowOcc(MpiSintelFlowOcc):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, stack_imgs=stack_imgs)
+
+class MpiSintelFinalFlowOcc(MpiSintelFlowOcc):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)    
+
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
         self.transform = transform

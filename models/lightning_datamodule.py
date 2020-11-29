@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from torchvision import transforms
-from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc
+from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc
 from torch.utils.data import DataLoader
 from math import ceil
 
@@ -27,6 +27,10 @@ class DatasetModule(pl.LightningDataModule):
             dataset = MpiSintelCleanOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         elif self.dataset_name == 'MpiSintelFinalOcc':
             dataset = MpiSintelFinalOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
+        elif self.dataset_name == 'MpiSintelCleanFlowOcc':
+            dataset = MpiSintelCleanFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
+        elif self.dataset_name == 'MpiSintelFinalFlowOcc':
+            dataset = MpiSintelFinalFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
         
@@ -39,11 +43,11 @@ class DatasetModule(pl.LightningDataModule):
         self.datasets['test'] = test_dset
         
     def train_dataloader(self):
-        return DataLoader(self.datasets['train'], shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+        return DataLoader(self.datasets['train'], shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False)
     
     def val_dataloader(self):
-        return DataLoader(self.datasets['val'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
+        return DataLoader(self.datasets['val'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False)
     
     def test_dataloader(self):
-        return DataLoader(self.datasets['test'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) 
+        return DataLoader(self.datasets['test'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False) 
 
