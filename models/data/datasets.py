@@ -52,10 +52,10 @@ class StaticCenterCrop:
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
     
 class MpiSintel(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size =None, stack_imgs=True):
-        self.transform = transform
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, stack_imgs=True):
+        self.transform  = transform
         self.replicates = replicates
-        self.image_size =image_size
+        self.image_size = image_size
         self.stack_imgs = stack_imgs
         
         flow_root = join(root, 'flow')
@@ -207,13 +207,13 @@ class MpiSintelOcc(Dataset):
 
             occ = frame_utils.read_gen(self.occ_list[index]).astype(np.float32)
             occ = cropper(occ)
+            toTensor = transforms.ToTensor()
+            occ = toTensor(occ)
             if self.image_size: 
-                occ = resize_flow(occ, self.image_size[0], self.image_size[1])
-            occ = occ.transpose(2,0,1)
-            occ[occ == 255] = 1 
-            occ = torch.from_numpy(occ)
-            
-            
+                resize = transforms.Resize(self.image_size)
+                occ = resize(occ)
+            occ[occ != 0.0] = 1.0
+
             return images, occ
     
     def __len__(self):
@@ -227,7 +227,100 @@ class MpiSintelFinalOcc(MpiSintelOcc):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
         super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)
 
+class MpiSintelFlowOcc(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, stack_imgs=True):
+        self.transform  = transform
+        self.replicates = replicates
+        self.image_size = image_size
+        self.stack_imgs = stack_imgs
+        
+        flow_root  = join(root, 'flow')
+        occ_root   = join(root, 'occlusions')
+        image_root = join(root, dstype)
+        
+        flow_file_list = sorted(glob(join(flow_root, '*/*.flo')))
+        occ_file_list = sorted(glob(join(occ_root, '*/*.png')))
+        assert len(occ_file_list) == len(flow_file_list), 'number of occlusion maps should be equal to number of flows'
+        self.flow_list  = []
+        self.occ_list   = []
+        self.image_list = []
+        
+        for flow_file, occ_file in zip(flow_file_list, occ_file_list):
+            fbase = flow_file[len(flow_root)+1:]
+            fprefix = fbase[:-8]
+            fnum = int(fbase[-8:-4])
+            
+            img1 = join(image_root, fprefix + '{:04d}'.format(fnum+0) + '.png')
+            img2 = join(image_root, fprefix + '{:04d}'.format(fnum+1) + '.png')
+            
+            assert isfile(img1), 'Cannot find file: {}'.format(img1)
+            assert isfile(img2), 'Cannot find file: {}'.format(img2)
+            assert isfile(flow_file), 'Cannot find file: {}'.format(flow_file)
+            assert isfile(occ_file), 'Cannot find file: {}'.format(occ_file)
+            
+            self.image_list.append([img1, img2])
+            self.flow_list.append(flow_file)
+            self.occ_list.append(occ_file)
+            
+        assert (len(self.image_list) == len(self.flow_list)), 'number of image pairs shoule be equal to number of flows'
+        
+        self.size = len(self.image_list)
 
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+            # read image pair
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            image_size = img1.shape[:2]
+
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
+
+            # read optical flow
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
+            flow = cropper(flow)
+            if self.image_size: 
+                flow = resize_flow(flow, self.image_size[0], self.image_size[1])
+            flow = flow.transpose(2,0,1)
+            flow = torch.from_numpy(flow)
+            
+            occ = frame_utils.read_gen(self.occ_list[index]).astype(np.float32)
+            occ = cropper(occ)
+            toTensor = transforms.ToTensor()
+            occ = toTensor(occ)
+            if self.image_size: 
+                resize = transforms.Resize(self.image_size)
+                occ = resize(occ)
+            occ[occ != 0.0] = 1.0
+            return images, flow, occ
+    
+    def __len__(self):
+        return self.size * self.replicates
+                
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
         self.transform = transform
@@ -355,8 +448,8 @@ class ImgFlowOccFromFolder(Dataset):
         first_images = sorted(glob(join(root, 'img_1', '*.' + iext)))
         second_images = sorted(glob(join(root, 'img_2', '*.' + iext)))
         self.flow_list = sorted(glob(join(root, 'flow', '*.flo')))
-        self.occlusion_list = sorted(glob(join(root, 'occlusion', '*.' + iext)))
-        assert len(first_images) == len(second_images) and len(first_images) == len(self.flow_list) and len(first_images) == len(self.occlusion_list), 'The number of image pairs should be equal to the number of optical flows and occlusion maps'
+        self.occ_list = sorted(glob(join(root, 'occlusion', '*.' + iext)))
+        assert len(first_images) == len(second_images) and len(first_images) == len(self.flow_list) and len(first_images) == len(self.occ_list), 'The number of image pairs should be equal to the number of optical flows and occlusion maps'
         self.image_list = list(zip(first_images, second_images))
         
         self.size = len(self.image_list)
@@ -371,7 +464,7 @@ class ImgFlowOccFromFolder(Dataset):
             return [self[ii] for ii in range(*index.indices(len(self)))]
         else:
             index = index % self.size
-
+            # read image pair
             img1 = frame_utils.read_gen(self.image_list[index][0])
             img2 = frame_utils.read_gen(self.image_list[index][1])
 
@@ -392,21 +485,24 @@ class ImgFlowOccFromFolder(Dataset):
                 images = torch.stack((img1, img2))
             else:
                 images = torch.cat((img1, img2))
-            
+
+            # read optical flow
             flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
             flow = cropper(flow)
             if self.image_size: 
                 flow = resize_flow(flow, self.image_size[0], self.image_size[1])
             flow = flow.transpose(2,0,1)
             flow = torch.from_numpy(flow)
-
-            occlusion = frame_utils.read_gen(self.occlusion_list[index]).astype(np.float32)
-            occlusion = cropper(occlusion)
-            occlusion = occlusion.transpose(2, 0, 1)
-            occlusion = torch.from_numpy(occlusion)
-            if self.image_size:
-                occlusion = resize(occlusion)
-            return images, flow, occlusion
+            
+            occ = frame_utils.read_gen(self.occ_list[index]).astype(np.float32)
+            occ = cropper(occ)
+            toTensor = transforms.ToTensor()
+            occ = toTensor(occ)
+            if self.image_size: 
+                resize = transforms.Resize(self.image_size)
+                occ = resize(occ)
+            occ[occ != 0.0] = 1.0
+            return images, flow, occ
         
     def __len__(self):
         return self.size * self.replicates
