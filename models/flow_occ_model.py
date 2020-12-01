@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split
+
 from torch.optim import Adam
 
 from models.data.datasets import ImgFlowOccFromFolder
@@ -12,15 +12,11 @@ from models.networks.flow_occ_net_s import FlowOccNetS
 from models.networks.flow_occ_net_c import FlowOccNetC
 from models.networks.cost_volume_flow_occ_net import FlowOccNetCV
 from models.networks.flow_occ_net import FlowOccNet
-from torchvision import transforms
 
-import os
-from math import ceil
 
 class FlowOccModel(pl.LightningModule):
-    def __init__(self, root, hparams):
+    def __init__(self, hparams):
         super().__init__()
-        self.root = root
         self.hparams = hparams
         model = self.hparams.get('model', 'simple')
         if model == 'simple':
@@ -56,7 +52,7 @@ class FlowOccModel(pl.LightningModule):
         
         flow_loss = F.l1_loss(flow_pred, flow)
         occ_loss = F.binary_cross_entropy(occ_pred, occ)
-        return flow_loss + occ_loss
+        return flow_loss, occ_loss
     
     def general_epoch_end(self, outputs, mode):
         avg_loss = torch.stack([output[mode + '_loss'] for output in outputs]).cpu().mean()
@@ -64,19 +60,29 @@ class FlowOccModel(pl.LightningModule):
         return avg_loss
     
     def training_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'train')
+        flow_loss, occ_loss = self.general_step(batch, batch_idx, 'train')
+        loss = flow_loss + occ_loss
+        
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'val')
+        flow_loss, occ_loss = self.general_step(batch, batch_idx, 'val')
+        loss = flow_loss + occ_loss
+        
+        self.log('val_flow_loss', flow_loss, logger = True)
+        self.log('val_occ_loss', occ_loss, logger = True)
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     
     def test_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'test')
+        flow_loss, occ_loss = self.general_step(batch, batch_idx, 'test')
+        loss = flow_loss + occ_loss
+        
+        self.log('test_flow_loss', flow_loss, logger = True)
+        self.log('test_occ_loss', occ_loss, logger = True)
         self.log('test_loss', loss, prog_bar= True, logger= True)
         return loss
     

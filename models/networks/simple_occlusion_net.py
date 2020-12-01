@@ -81,12 +81,12 @@ class SimpleOcclusionNet(nn.Module):
         self.up4 = Upsample(32+16+1, 16)  # skip-connected with output from down1
 
 
-        ## flow prediction
+        ## occlusion prediction
         self.predict_occ5 = predict_occ(128)
         self.predict_occ4 = predict_occ(96)
         self.predict_occ3 = predict_occ(64)
         self.predict_occ2 = predict_occ(32)
-        self.predict_occ1 = predict_occ(16)
+        self.predict_occ1 = predict_occ(16, is_last=True)
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         
         for m in self.modules():
@@ -121,14 +121,17 @@ class SimpleOcclusionNet(nn.Module):
         x = self.up4(x, x1)
         
         occ = self.predict_occ1(x)
-        return self.upsample(occ)
+        occ_soft = torch.sigmoid(10 * self.upsample(occ))
+        occ_hard = torch.where(occ_soft > 0.5, 1.0, 0.0)
+        
+        return (occ_hard - occ_soft).detach() + occ_soft
 
-def predict_occ(in_channels):
+def predict_occ(in_channels, is_last=False):
     return nn.Sequential(
         conv(in_channels, 32),
         conv(32, 16),
         conv(16, 1, activation=False),
-        nn.Sigmoid()
+        nn.Sigmoid() if not is_last else nn.Identity()
     )    
     
 def conv(in_channels, out_channels, kernel_size=3, stride=1, activation=True):

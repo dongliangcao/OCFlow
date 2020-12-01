@@ -12,10 +12,6 @@ from models.networks.flow_net_c import FlowNetC
 from models.networks.cost_volume_flow_net import FlowNetCV
 from models.networks.flow_net import FlowNet
 from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
-from torchvision import transforms
-
-import os
-from math import ceil
 
 class FlowModel(pl.LightningModule):
     def __init__(self, hparams):

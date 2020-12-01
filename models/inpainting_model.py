@@ -7,10 +7,6 @@ import pytorch_lightning as pl
 from torch.optim import Adam
 
 from models.networks.image_inpainting_net import InpaintingNet
-from torchvision import transforms
-
-import os
-from math import ceil
 
 class InpaintingModel(pl.LightningModule):
     def __init__(self, hparams):
@@ -73,7 +69,7 @@ class InpaintingModel(pl.LightningModule):
         
         img_completed = self.forward(img_occluded)
         
-        loss = (torch.abs(img1 - img_completed) * occ).sum() / (occ.sum() + 1e-12)
+        loss = (torch.abs(img1 - img_completed) * occ).sum() / (3*occ.sum() + 1e-16)
         
         return loss
     
