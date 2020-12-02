@@ -306,12 +306,13 @@ def evaluate_kitti_flow(gt_flow, pred_flow, rigid_flow=None):
 def calculate_average_epe(dataloader, model):
     loss = 0.0
     count = 0
-    for (imgs, flow) in dataloader:
+    for (imgs, flows) in dataloader:
         model.eval()
-        predicted_flow = model(imgs)
+        predicted_flows = model(imgs)
+
         for i in range(imgs.shape[0]):
-            flow = flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
-            predicted_flow = predicted_flow.squeeze(0).detach().cpu().numpy().transpose(1, 2, 0)
+            flow = flows[i].detach().cpu().numpy().transpose(1, 2, 0)
+            predicted_flow = predicted_flows[i].detach().cpu().numpy().transpose(1, 2, 0)
             loss += evaluate_flow(flow, predicted_flow)
             count += 1
     return loss / count

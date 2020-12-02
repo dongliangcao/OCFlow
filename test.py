@@ -6,6 +6,8 @@ from models.flow_occ_model import FlowOccModel
 from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import argparse
+import torch
+torch.manual_seed(0)
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
 # optical flow model should be ['simple', 'flownets', 'flownetc', 'pwc', 'flownet']
 # occlusion model should be ['simple', 'occnets', 'occnetc']
@@ -51,16 +53,15 @@ if __name__ == '__main__':
     #specify early stopping
     early_stop_callback = EarlyStopping(monitor='val_loss',
     min_delta=0.00,
-    patience=50,
+    patience=60,
     verbose=False,
     mode='min')
-    
     #specify Trainer and start training
     if not args.find_best_lr: 
         trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=args.overfit_batches)
         trainer.fit(model, datamodule = data_module)
     else: 
         trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)
-        lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None)
+        lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)

@@ -3,7 +3,8 @@ from torchvision import transforms
 from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc
 from torch.utils.data import DataLoader
 from math import ceil
-
+import torch
+torch.manual_seed(0)
 class DatasetModule(pl.LightningDataModule): 
     def __init__(self, root='', image_size=None, batch_size=32, dataset_name='MpiSintelClean', num_workers=6):
         self.root = root
@@ -33,21 +34,21 @@ class DatasetModule(pl.LightningDataModule):
             dataset = MpiSintelFinalFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
-        
-        train_dset = dataset[:ceil(0.8 * len(dataset))]
-        val_dset   = dataset[ceil(0.8 * len(dataset)):ceil(0.9 * len(dataset))]
-        test_dset  = dataset[ceil(0.9 * len(dataset)):]
+        len_trainset = ceil(0.8 * len(dataset))
+        len_valset = ceil(0.1 * len(dataset))
+        train_dset, val_dset, test_dset = torch.utils.data.random_split(dataset, [len_trainset, len_valset, len(dataset) - len_trainset - len_valset])
+
 
         self.datasets['train'] = train_dset
         self.datasets['val'] = val_dset
         self.datasets['test'] = test_dset
         
     def train_dataloader(self):
-        return DataLoader(self.datasets['train'], shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False)
+        return DataLoader(self.datasets['train'], shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
     
     def val_dataloader(self):
-        return DataLoader(self.datasets['val'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False)
+        return DataLoader(self.datasets['val'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True)
     
     def test_dataloader(self):
-        return DataLoader(self.datasets['test'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=False) 
+        return DataLoader(self.datasets['test'], shuffle=False, batch_size=self.batch_size, num_workers=self.num_workers, pin_memory=True) 
 
