@@ -50,10 +50,17 @@ class FlowModel(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        imgs, flow = batch
+        if not isinstance(batch, (list, tuple)):
+            raise ValueError('Not supported dataset')
+        elif len(batch) == 2:
+            imgs, flow = batch
+        elif len(batch) == 3:
+            imgs, flow, _ = batch
+        else:
+            raise ValueError('Not supported dataset')
         flow_pred = self.model(imgs)
         
-        loss = F.l1_loss(flow_pred, flow)
+        loss = F.mse_loss(flow_pred, flow)
         
         return loss
     

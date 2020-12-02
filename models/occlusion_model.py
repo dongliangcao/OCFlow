@@ -43,12 +43,23 @@ class OcclusionModel(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        imgs, occ = batch
-        occ_pred = self.forward(imgs)
-        
-        loss = F.binary_cross_entropy(occ_pred, occ)
-        
-        return loss
+        if not isinstance(batch, (list, tuple)):
+            raise ValueError('Not supported dataset')
+        elif len(batch) == 2:
+            imgs, occ = batch
+        elif len(batch) == 3:
+            imgs, _, occ = batch
+        else:
+            raise ValueError('Not supported dataset')
+        occ_pred = self(imgs)
+        ## focal loss 
+        BCE_loss = F.binary_cross_entropy(occ_pred, occ, reduction='none')
+        pt = torch.exp(-BCE_loss) # prevents nans when probability 0
+#         alpha = 0.25
+        gamma = 2
+#         alpha_tensor = (1 - alpha) + occ * (2 * alpha - 1)
+        focal_loss = (1 - pt)**gamma * BCE_loss
+        return focal_loss.mean()
     
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'train')
