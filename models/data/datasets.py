@@ -212,7 +212,7 @@ class MpiSintelOcc(Dataset):
             if self.image_size: 
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
-            occ[occ != 0.0] = 1.0
+            occ[occ > 0.5] = 1.0
 
             return images, occ
     
@@ -315,7 +315,7 @@ class MpiSintelFlowOcc(Dataset):
             if self.image_size: 
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
-            occ[occ != 0.0] = 1.0
+            occ[occ > 0.5] = 1.0
             return images, flow, occ
     
     def __len__(self):
@@ -509,7 +509,7 @@ class ImgFlowOccFromFolder(Dataset):
             if self.image_size: 
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
-            occ[occ != 0.0] = 1.0
+            occ[occ > 0.5] = 1.0
             return images, flow, occ
         
     def __len__(self):
