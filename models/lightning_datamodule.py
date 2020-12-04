@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from torchvision import transforms
-from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc
+from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc, MpiSintelCleanInpainting, MpiSintelFinalInpainting
 from torch.utils.data import DataLoader
 from math import ceil
 import torch
@@ -32,6 +32,10 @@ class DatasetModule(pl.LightningDataModule):
             dataset = MpiSintelCleanFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         elif self.dataset_name == 'MpiSintelFinalFlowOcc':
             dataset = MpiSintelFinalFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
+        elif self.dataset_name == 'MpiSintelCleanInpainting':
+            dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size)
+        elif self.dataset_name == 'MpiSintelFinalInpainting':
+            dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
         len_trainset = ceil(0.8 * len(dataset))

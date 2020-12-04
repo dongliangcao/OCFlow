@@ -60,7 +60,7 @@ def edge_aware_smoothness_loss(img, flow, alpha=10.0):
     
     return charbonnier_loss(loss)
 
-class OneStageModel(pl.LightningModule):
+class FlowStageModel(pl.LightningModule):
     """
     Training with one stages: optical flow prediction
     """
@@ -156,6 +156,60 @@ class OneStageModel(pl.LightningModule):
         
         self.log('test_photometric', photometric_error, logger = True)
         self.log('test_smoothness', smoothness_term, logger = True)
+        
+        self.log('test_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def configure_optimizers(self):
+        return Adam(self.parameters(), self.lr)
+    
+class InpaintingStageModel(pl.LightningModule):
+    """
+    Training with two stages:
+    First stage: optical flow and occlusion map prediction
+    Second stage: inpainting network predicts pixel value for the occluded regions 
+    """
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams = hparams
+        self.lr = hparams['learning_rate']
+        self.model = InpaintingNet()
+    
+    def forward(self, img):
+        return self.model(img)
+    
+    @property
+    def is_cuda(self):
+        return next(self.parameters()).is_cuda
+    
+    
+    def save_state_dict(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def general_step(self, batch, batch_idx, mode):
+        imgs, complete_imgs, occlusion_map = batch
+        # inpainting
+        pred_imgs = self(complete_imgs * (1 - occlusion_map))
+        
+        loss = charbonnier_loss((pred_imgs - complete_imgs) * occlusion_map, reduction=False).sum() / (3*occlusion_map.sum() + 1e-16)
+        return loss
+    
+    
+    def training_step(self, batch, batch_idx):
+        loss = self.general_step(batch, batch_idx, 'train')
+        
+        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        return loss
+    
+    
+    def validation_step(self, batch, batch_idx):
+        loss = self.general_step(batch, batch_idx, 'val')
+        
+        self.log('val_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def test_step(self, batch, batch_idx):
+        loss = self.general_step(batch, batch_idx, 'test')
         
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss

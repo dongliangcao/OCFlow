@@ -38,8 +38,8 @@ class StaticRandomCrop:
     def __init__(self, image_size, crop_size):
         self.th, self.tw = crop_size
         h, w = image_size
-        self.h1 = random.randint(0, h - self.th)
-        self.w1 = random.randint(0, w - self.tw)
+        self.h1 = np.random.randint(0, h - self.th)
+        self.w1 = np.random.randint(0, w - self.tw)
 
     def __call__(self, img):
         return img[self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw),:]
@@ -50,6 +50,19 @@ class StaticCenterCrop:
         self.h, self.w = image_size
     def __call__(self, img):
         return img[(self.h-self.th)//2:(self.h+self.th)//2, (self.w-self.tw)//2:(self.w+self.tw)//2,:]
+    
+class StaticRandomOcclusion:
+    def __init__(self, image_size, crop_size):
+        self.th, self.tw = crop_size
+        h, w = image_size
+        self.h1 = np.random.randint(0, h - self.th)
+        self.w1 = np.random.randint(0, w - self.tw)
+        
+    def __call__(self, img):
+        occlusion_map = np.zeros(shape=(img.shape[0], img.shape[1], 1), dtype=np.float32)
+        occlusion_map[self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw), :] = 1.0 # 1: occluded pixels
+        img[self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw), :] = 0.0
+        return img, occlusion_map
     
 class MpiSintel(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, stack_imgs=True):
@@ -213,6 +226,7 @@ class MpiSintelOcc(Dataset):
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
             occ[occ > 0.5] = 1.0
+            occ[occ != 1.0] = 0.0
 
             return images, occ
     
@@ -316,6 +330,7 @@ class MpiSintelFlowOcc(Dataset):
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
             occ[occ > 0.5] = 1.0
+            occ[occ != 1.0] = 0.0
             return images, flow, occ
     
     def __len__(self):
@@ -327,7 +342,70 @@ class MpiSintelCleanFlowOcc(MpiSintelFlowOcc):
 
 class MpiSintelFinalFlowOcc(MpiSintelFlowOcc):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, stack_imgs=True):
-        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)    
+        super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)
+                
+class MpiSintelInpainting(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, occlusion_ratio=0.5):
+        self.transform = transform
+        self.replicates = replicates
+        self.image_size =image_size
+        self.occlusion_ratio = occlusion_ratio
+        
+        image_root = join(root, dstype)
+        
+        self.image_list = sorted(glob(join(image_root, '*/*.png')))
+        
+        self.size = len(self.image_list)
+
+        self.render_size = list(frame_utils.read_gen(self.image_list[0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img = frame_utils.read_gen(self.image_list[index])
+
+            h, w = img.shape[:2]
+
+            cropper = StaticCenterCrop((h, w), self.render_size)
+            img = cropper(img)
+            
+            complete_img = img.copy()
+            th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
+            occ = StaticRandomOcclusion((h, w), (th, tw))
+            img, occlusion_map = occ(img)
+            occlusion_map = torch.from_numpy(occlusion_map.transpose(2, 0, 1))
+            if self.transform:
+                img = self.transform(img)
+                complete_img = self.transform(complete_img)
+            
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img = resize(img)
+                complete_img = resize(complete_img)
+                occlusion_map = resize(occlusion_map)
+            occlusion_map[occlusion_map > 0.5] = 1.0
+            occlusion_map[occlusion_map != 1.0] = 0.0
+
+            return img, complete_img, occlusion_map
+    
+    def __len__(self):
+        return self.size * self.replicates
+    
+class MpiSintelCleanInpainting(MpiSintelInpainting):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio)
+
+class MpiSintelFinalInpainting(MpiSintelInpainting):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio)
 
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
@@ -510,6 +588,7 @@ class ImgFlowOccFromFolder(Dataset):
                 resize = transforms.Resize(self.image_size)
                 occ = resize(occ)
             occ[occ > 0.5] = 1.0
+            occ[occ != 1.0] = 0.0
             return images, flow, occ
         
     def __len__(self):
