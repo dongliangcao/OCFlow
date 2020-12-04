@@ -33,9 +33,9 @@ class DatasetModule(pl.LightningDataModule):
         elif self.dataset_name == 'MpiSintelFinalFlowOcc':
             dataset = MpiSintelFinalFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         elif self.dataset_name == 'MpiSintelCleanInpainting':
-            dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size)
+            dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=0.3)
         elif self.dataset_name == 'MpiSintelFinalInpainting':
-            dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size)
+            dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=0.3)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
         len_trainset = ceil(0.8 * len(dataset))
