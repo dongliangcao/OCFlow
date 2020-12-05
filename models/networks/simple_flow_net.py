@@ -79,7 +79,7 @@ class SimpleFlowNet(nn.Module):
         self.up2 = Upsample(96+64+2, 64)  # skip-connected with output from down3
         self.up3 = Upsample(64+32+2, 32)  # skip-connected with output from down2
         self.up4 = Upsample(32+16+2, 16)  # skip-connected with output from down1
-
+        self.up5 = Upsample(16+in_channels+2, 16) # skip-connected with output from input
 
         ## flow prediction
         self.predict_flow5 = predict_flow(128)
@@ -87,7 +87,7 @@ class SimpleFlowNet(nn.Module):
         self.predict_flow3 = predict_flow(64)
         self.predict_flow2 = predict_flow(32)
         self.predict_flow1 = predict_flow(16)
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.predict_flow0 = predict_flow(16)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -120,8 +120,12 @@ class SimpleFlowNet(nn.Module):
         x = torch.cat((x, flow2), dim=1)
         x = self.up4(x, x1)
         
-        flow = self.predict_flow1(x)
-        return self.upsample(flow)
+        flow1 = self.predict_flow1(x)
+        x = torch.cat((x, flow1), dim=1)
+        x = self.up5(x, img)
+        
+        flow0 = self.predict_flow0(x)
+        return flow0
 
 def predict_flow(in_channels):
     return nn.Sequential(
@@ -132,7 +136,7 @@ def predict_flow(in_channels):
     
 def conv(in_channels, out_channels, kernel_size=3, stride=1, activation=True):
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=(kernel_size-1)//2),
+        nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=kernel_size//2),
         nn.LeakyReLU(0.1,inplace=True) if activation else nn.Identity()
     )
     

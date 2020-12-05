@@ -79,7 +79,7 @@ class SimpleOcclusionNet(nn.Module):
         self.up2 = Upsample(96+64+1, 64)  # skip-connected with output from down3
         self.up3 = Upsample(64+32+1, 32)  # skip-connected with output from down2
         self.up4 = Upsample(32+16+1, 16)  # skip-connected with output from down1
-
+        self.up5 = Upsample(16+in_channels+1, 16) # skip-connected with output from img
 
         ## occlusion prediction
         self.predict_occ5 = predict_occ(128)
@@ -87,7 +87,8 @@ class SimpleOcclusionNet(nn.Module):
         self.predict_occ3 = predict_occ(64)
         self.predict_occ2 = predict_occ(32)
         self.predict_occ1 = predict_occ(16)
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.predict_occ0 = predict_occ(16)
+#         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -120,11 +121,15 @@ class SimpleOcclusionNet(nn.Module):
         x = torch.cat((x, occ2), dim=1)
         x = self.up4(x, x1)
         
-        occ = self.predict_occ1(x)
+        occ1 = self.predict_occ1(x)
+        x = torch.cat((x, occ1), dim=1)
+        x = self.up5(x, img)
+        
+        occ0 = self.predict_occ0(x)
 #         occ_soft = torch.sigmoid(10 * self.upsample(occ))
 #         occ_hard = torch.where(occ_soft > 0.5, 1.0, 0.0)
         
-        return self.upsample(occ)
+        return occ0
 def predict_occ(in_channels, is_last=False):
     return nn.Sequential(
         conv(in_channels, 32),
@@ -135,6 +140,6 @@ def predict_occ(in_channels, is_last=False):
     
 def conv(in_channels, out_channels, kernel_size=3, stride=1, activation=True):
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=(kernel_size-1)//2),
+        nn.Conv2d(in_channels, out_channels, kernel_size, stride=stride, padding=kernel_size//2),
         nn.LeakyReLU(0.1,inplace=True) if activation else nn.Identity()
     )

@@ -38,7 +38,7 @@ class Upsample(nn.Module):
         self.lrelu2 = nn.LeakyReLU(0.1)
         
         self.conv3 = nn.Conv2d(inter_channels, out_channels, 1, bias=False)
-        self.bn3 = nn.BatchNorm2d(out_channels)
+        self.bn3 = nn.BatchNorm2d(out_channels) if activation else nn.Identity()
         self.lrelu3 = nn.LeakyReLU(0.1) if activation else nn.Identity()
         
     def forward(self, x1, x2):
