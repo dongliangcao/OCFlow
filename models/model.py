@@ -10,7 +10,57 @@ from models.networks.simple_flow_net import SimpleFlowNet
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
 
-class OneStageModel(pl.LightningModule):
+def charbonnier_loss(loss, alpha=0.001, reduction=True):
+    """
+    Args:
+        loss: torch.Tensor
+    Return:
+        cb_loss: torch.Tensor, charbonnier_loss
+    """
+    cb_loss = torch.sqrt(loss**2 + alpha**2)
+    if reduction:
+        cb_loss = cb_loss.mean()
+    return cb_loss
+
+def gradient(img):
+    """
+    Args:
+        img: torch.Tensor, dim: [B, C, H, W]
+    Return:
+        dx: forward gradient in direction x, dim: [B, C, H, W]
+        dy: forward gradient in direction y, dim: [B, C, H, W]
+    """
+    assert img.dim() == 4
+    _, _, ny, nx = img.shape
+    dx = img[:, :, :, [*range(1, nx), nx-1]] - img
+    dy = img[:, :, [*range(1, ny), ny - 1], :] - img
+    
+    return dx, dy
+
+def edge_aware_smoothness_loss(img, flow, alpha=10.0):
+    """
+    Args:
+        img: torch.Tensor, dim: [B, C, H, W]
+        flow: torch.Tensor, dim: [B, 2, H, W]
+        alpha: float, control the edge awareness
+    Return:
+        loss: torch.Tensor
+    """
+    assert img.dim() == 4 
+    assert flow.dim() == 4 and flow.shape[1] == 2
+
+    img_dx, img_dy = gradient(img)
+    flow_dx, flow_dy = gradient(flow)
+    
+    img_dx_norm = torch.norm(img_dx, p=2, dim=1)
+    img_dy_norm = torch.norm(img_dy, p=2, dim=1)
+    flow_dx_norm = torch.norm(flow_dx, p=2, dim=1)
+    flow_dy_norm = torch.norm(flow_dy, p=2, dim=1)
+    loss = (flow_dx_norm) * torch.exp(-alpha * img_dx_norm) + (flow_dy_norm) * torch.exp(-alpha * img_dy_norm)
+    
+    return charbonnier_loss(loss)
+
+class FlowStageModel(pl.LightningModule):
     """
     Training with one stages: optical flow prediction
     """
@@ -78,8 +128,70 @@ class OneStageModel(pl.LightningModule):
         img_warped = self.warp(img2, flow_pred)
         
         # calculate photometric error
-        loss = F.l1_loss(img_warped, img1)
+        photometric_error = charbonnier_loss(img_warped - img1)
+        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        return photometric_error, smoothness_term
+    
+    
+    def training_step(self, batch, batch_idx):
+        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'train')
+        loss = photometric_error + 0.2 * smoothness_term
+        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        return loss
+    
+    
+    def validation_step(self, batch, batch_idx):
+        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'val')
+        loss = photometric_error + 0.2 * smoothness_term
         
+        self.log('val_photometric', photometric_error, logger = True)
+        self.log('val_smoothness', smoothness_term, logger = True)
+        
+        self.log('val_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def test_step(self, batch, batch_idx):
+        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'test')
+        loss = photometric_error + 0.2 * smoothness_term
+        
+        self.log('test_photometric', photometric_error, logger = True)
+        self.log('test_smoothness', smoothness_term, logger = True)
+        
+        self.log('test_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def configure_optimizers(self):
+        return Adam(self.parameters(), self.lr)
+    
+class InpaintingStageModel(pl.LightningModule):
+    """
+    Training with two stages:
+    First stage: optical flow and occlusion map prediction
+    Second stage: inpainting network predicts pixel value for the occluded regions 
+    """
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams = hparams
+        self.lr = hparams['learning_rate']
+        self.model = InpaintingNet()
+    
+    def forward(self, img):
+        return self.model(img)
+    
+    @property
+    def is_cuda(self):
+        return next(self.parameters()).is_cuda
+    
+    
+    def save_state_dict(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def general_step(self, batch, batch_idx, mode):
+        imgs, complete_imgs, occlusion_map = batch
+        # inpainting
+        pred_imgs = self(complete_imgs * (1 - occlusion_map))
+        
+        loss = charbonnier_loss((pred_imgs - complete_imgs) * occlusion_map, reduction=False).sum() / (3*occlusion_map.sum() + 1e-16)
         return loss
     
     
@@ -175,40 +287,45 @@ class TwoStageModel(pl.LightningModule):
         occ_pred = self.occ_pred(imgs)
         # warp image
         img_warped = self.warp(img2, flow_pred)
+        
         # get occluded image
         img_occluded = img_warped * (1 - occ_pred) # 1: occluded 0: non-occluded
-        # calculate photometric error
-        photometric_error = (torch.abs(img1 - img_warped) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+
         # get completed image
         img_completed = self.inpainting(img_occluded)
-        # calculate the reconstruction error
-        reconst_error = (torch.abs(img1 - img_completed) * occ_pred).sum() / (3*occ_pred.sum() + 1e-16)
         
-        return photometric_error, reconst_error
+        # calculate the reconstruction error
+#         reconst_error = (torch.abs(img1 - img_completed) * occ_pred).sum() / (3*occ_pred.sum() + 1e-16)
+        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+        reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
+        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        return photometric_error, reconst_error, smoothness_term
     
     
     def training_step(self, batch, batch_idx):
-        photometric_error, reconst_error = self.general_step(batch, batch_idx, 'train')
-        loss = 3.0 * photometric_error + reconst_error
-        self.log('train_photometric_error', photometric_error, logger = True)
-        self.log('train_reconst_error', reconst_error, logger = True)
+        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'train')
+        loss = photometric_error + 5 * reconst_error + 0.2 * smoothness_term
+#         self.log('train_photometric_error', photometric_error, logger = True)
+#         self.log('train_reconst_error', reconst_error, logger = True)
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        photometric_error, reconst_error = self.general_step(batch, batch_idx, 'val')
-        loss = 3.0 * photometric_error + reconst_error
-        self.log('val_photometric_error', photometric_error, logger = True)
-        self.log('val_reconst_error', reconst_error, logger = True)
+        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'val')
+        loss = photometric_error + 5 * reconst_error + 0.2 * smoothness_term
+        self.log('val_photometric', photometric_error, logger = True)
+        self.log('val_reconst', reconst_error, logger = True)
+        self.log('val_smoothness', smoothness_term, logger = True)
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     def test_step(self, batch, batch_idx):
-        photometric_error, reconst_error = self.general_step(batch, batch_idx, 'test')
-        loss = 3.0 * photometric_error + reconst_error
+        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'test')
+        loss = photometric_error + 5 * reconst_error + 0.2 * smoothness_term
         self.log('test_photometric_error', photometric_error, logger = True)
         self.log('test_reconst_error', reconst_error, logger = True)
+        self.log('test_smoothness', smoothness_term, logger = True)
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss
     
