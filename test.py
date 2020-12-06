@@ -19,6 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, help='Type of model', default='simple')
     parser.add_argument('--epochs', type=int, help='Epochs to train', default=100)
     parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
+    parser.add_argument('--image_size', type=int, help='Resize image to this size', default=None)
     parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3)
     parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
     parser.add_argument('--root', type=str, help='Data root')
@@ -47,7 +48,7 @@ if __name__ == '__main__':
     #specify data module
     dataset_name = args.dataset_name
     assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc']
-    data_module = DatasetModule(root=args.root, batch_size=args.batch_size, dataset_name=dataset_name)
+    data_module = DatasetModule(root=args.root,image_size= args.image_size, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping

@@ -4,7 +4,7 @@ from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintel
 from torch.utils.data import DataLoader
 from math import ceil
 import torch
-torch.manual_seed(0)
+
 class DatasetModule(pl.LightningDataModule): 
     def __init__(self, root='', image_size=None, batch_size=32, dataset_name='MpiSintelClean', num_workers=6):
         self.root = root
