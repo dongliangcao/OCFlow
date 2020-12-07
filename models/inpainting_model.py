@@ -69,7 +69,8 @@ class InpaintingModel(pl.LightningModule):
         
         img_completed = self.forward(img_occluded)
         
-        loss = (torch.abs(img1 - img_completed) * occ).sum() / (3*occ.sum() + 1e-16)
+#         square_error = F.mse_loss(img_completed, img1, reduction='none')
+        loss = (torch.abs(img_completed-img1) * occ).sum() / (3*occ.sum() + 1e-16)
         
         return loss
     

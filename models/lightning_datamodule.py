@@ -4,7 +4,7 @@ from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintel
 from torch.utils.data import DataLoader
 from math import ceil
 import torch
-torch.manual_seed(0)
+
 class DatasetModule(pl.LightningDataModule): 
     def __init__(self, root='', image_size=None, batch_size=32, dataset_name='MpiSintelClean', num_workers=6, overfit=False):
         self.root = root
@@ -42,7 +42,7 @@ class DatasetModule(pl.LightningDataModule):
         if not self.overfit:
             len_trainset = ceil(0.8 * len(dataset))
             len_valset = ceil(0.1 * len(dataset))
-            train_dset, val_dset, test_dset = torch.utils.data.random_split(dataset, [len_trainset, len_valset, len(dataset) - len_trainset - len_valset])
+            train_dset, val_dset, test_dset = torch.utils.data.random_split(dataset, [len_trainset, len_valset, len(dataset) - len_trainset - len_valset], generator=torch.Generator().manual_seed(0))
         else:
             train_dset = val_dset = test_dset = dataset
 

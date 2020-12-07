@@ -22,6 +22,17 @@ def charbonnier_loss(loss, alpha=0.001, reduction=True):
         cb_loss = cb_loss.mean()
     return cb_loss
 
+def second_order_photometric_error(img_pred, img, reduction=True):
+    img_pred_dx, img_pred_dy = gradient(img_pred)
+    img_dx, img_dy = gradient(img)
+    img_pred_dx_norm = torch.norm(img_pred_dx, p=2, dim=1)
+    img_pred_dy_norm = torch.norm(img_pred_dy, p=2, dim=1)
+    img_dx_norm = torch.norm(img_dx, p=2, dim=1)
+    img_dy_norm = torch.norm(img_dy, p=2, dim=1)
+    
+    loss = charbonnier_loss(img_pred_dx_norm - img_dx_norm, reduction=reduction) + charbonnier_loss(img_pred_dy_norm - img_dy_norm, reduction=reduction)
+    return loss
+
 def gradient(img):
     """
     Args:
@@ -37,7 +48,7 @@ def gradient(img):
     
     return dx, dy
 
-def edge_aware_smoothness_loss(img, flow, alpha=10.0):
+def edge_aware_smoothness_loss(img, flow, alpha=10.0, reduction=True):
     """
     Args:
         img: torch.Tensor, dim: [B, C, H, W]
@@ -58,7 +69,7 @@ def edge_aware_smoothness_loss(img, flow, alpha=10.0):
     flow_dy_norm = torch.norm(flow_dy, p=2, dim=1)
     loss = (flow_dx_norm) * torch.exp(-alpha * img_dx_norm) + (flow_dy_norm) * torch.exp(-alpha * img_dy_norm)
     
-    return charbonnier_loss(loss)
+    return charbonnier_loss(loss, reduction=reduction)
 
 class FlowStageModel(pl.LightningModule):
     """
@@ -68,7 +79,11 @@ class FlowStageModel(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.lr = hparams['learning_rate']
+        self.smoothness_weight = hparams.get('smoothness_weight', 0.0)
+        self.second_order_weight = hparams.get('second_order_weight', 0.0)
+        self.with_occ = hparams.get('with_occ', False)
         self.flow_pred = SimpleFlowNet()
+        
         
     def forward(self, x):
         return self.flow_pred(x)
@@ -130,32 +145,62 @@ class FlowStageModel(pl.LightningModule):
         # calculate photometric error
         photometric_error = charbonnier_loss(img_warped - img1)
         smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
-        return photometric_error, smoothness_term
+        second_order_error = second_order_photometric_error(img_warped, img1)
+        return photometric_error, smoothness_term, second_order_error
     
+    def general_step_occ(self, batch, batch_idx, mode):
+        imgs, flow, occ = batch
+        img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
+        # flow prediction
+        flow_pred = self(imgs)
+        img_warped = self.warp(img2, flow_pred)
+        
+        # calculate photometric error
+        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
+        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
+        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        
+        return photometric_error, smoothness_term, second_order_error
     
     def training_step(self, batch, batch_idx):
-        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'train')
-        loss = photometric_error + 0.2 * smoothness_term
+        if not self.with_occ:
+            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'train')
+        else:
+            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'train')
+        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
+        
+        self.log('train_photometric', photometric_error, logger = True)
+        self.log('train_smoothness', smoothness_term, logger = True)
+        self.log('train_second_order', second_order_error, logger = True)
+        
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'val')
-        loss = photometric_error + 0.2 * smoothness_term
+        if not self.with_occ:
+            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'val')
+        else:
+            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'val')
+        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         self.log('val_photometric', photometric_error, logger = True)
         self.log('val_smoothness', smoothness_term, logger = True)
+        self.log('val_second_order', second_order_error, logger = True)
         
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     def test_step(self, batch, batch_idx):
-        photometric_error, smoothness_term = self.general_step(batch, batch_idx, 'test')
-        loss = photometric_error + 0.2 * smoothness_term
+        if not self.with_occ:
+            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'test')
+        else:
+            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'test')
+        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         self.log('test_photometric', photometric_error, logger = True)
         self.log('test_smoothness', smoothness_term, logger = True)
+        self.log('test_second_order', second_order_error, logger = True)
         
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss

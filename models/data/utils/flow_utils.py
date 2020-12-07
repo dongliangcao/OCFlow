@@ -176,13 +176,14 @@ def flow2img(flow):
 
     return np.uint8(img)
 
-def flow_error(tu, tv, u, v):
+def flow_error(tu, tv, u, v, occ=None):
     """
     Calculate average end point error
     :param tu: ground-truth horizontal flow map
     :param tv: ground-truth vertical flow map
     :param u:  estimated horizontal flow map
     :param v:  estimated vertical flow map
+    :param occ: occlusion map
     :return: End point error of the estimated flow
     """
     smallflow = 0.0
@@ -223,6 +224,10 @@ def flow_error(tu, tv, u, v):
 
     epe = np.sqrt((stu - su)**2 + (stv - sv)**2)
     epe = epe[ind2]
+    if occ is not None:
+        occ = (1 - occ).astype(bool)
+        socc = occ.reshape(-1)
+        epe = epe[socc]
     mepe = np.mean(epe)
     return mepe
 
@@ -281,13 +286,13 @@ def evaluate_flow_file(gt_file, pred_file):
     return average_pe
 
 
-def evaluate_flow(gt_flow, pred_flow):
+def evaluate_flow(gt_flow, pred_flow, occ=None):
     """
     gt: ground-truth flow
     pred: estimated flow
     """
     average_pe = flow_error(gt_flow[:, :, 0], gt_flow[:, :, 1],
-                            pred_flow[:, :, 0], pred_flow[:, :, 1])
+                            pred_flow[:, :, 0], pred_flow[:, :, 1], occ)
     return average_pe
 
 
@@ -303,17 +308,26 @@ def evaluate_kitti_flow(gt_flow, pred_flow, rigid_flow=None):
                                     gt_flow[:, :, 2])
     return (epe, acc)
 
-def calculate_average_epe(dataloader, model):
+def calculate_average_epe(dataloader, model, with_occ=False):
     loss = 0.0
     count = 0
-    for (imgs, flows) in dataloader:
+    for batch in dataloader:
         model.eval()
+        assert len(batch) in [2, 3]
+        if len(batch) == 2:
+            imgs, flows = batch
+        else:
+            imgs, flows, occs = batch
+        
         predicted_flows = model(imgs)
 
         for i in range(imgs.shape[0]):
             flow = flows[i].detach().cpu().numpy().transpose(1, 2, 0)
             predicted_flow = predicted_flows[i].detach().cpu().numpy().transpose(1, 2, 0)
-            loss += evaluate_flow(flow, predicted_flow)
+            occ = None
+            if with_occ:
+                occ = occs[i].detach().cpu().numpy().transpose(1, 2, 0)
+            loss += evaluate_flow(flow, predicted_flow, occ)
             count += 1
     return loss / count
 
