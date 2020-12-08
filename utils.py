@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from models.data.utils.flow_utils import flow2img, evaluate_flow
 
-def warp(img, flow, is_mask=True):
+def warp(img, flow, is_mask=False):
         """
         warp an image/tensor (im2) back to im1, according to the optical flow
 
