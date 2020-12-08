@@ -6,13 +6,14 @@ from math import ceil
 import torch
 
 class DatasetModule(pl.LightningDataModule): 
-    def __init__(self, root='', image_size=None, batch_size=32, dataset_name='MpiSintelClean', num_workers=6, overfit=False):
+    def __init__(self, root='', image_size=None, batch_size=32, dataset_name='MpiSintelClean', num_workers=6, overfit=False, occlusion_ratio=0.3):
         self.root = root
         self.image_size = image_size
         self.batch_size = batch_size
         self.dataset_name = dataset_name
         self.num_workers = num_workers
         self.overfit = overfit
+        self.occlusion_ratio = occlusion_ratio
     def prepare_data(self):
         self.datasets = dict()
         transform = transforms.Compose([
@@ -34,9 +35,9 @@ class DatasetModule(pl.LightningDataModule):
         elif self.dataset_name == 'MpiSintelFinalFlowOcc':
             dataset = MpiSintelFinalFlowOcc(root=self.root, transform=transform, image_size=self.image_size, stack_imgs=False)
         elif self.dataset_name == 'MpiSintelCleanInpainting':
-            dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=0.3)
+            dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=self.occlusion_ratio)
         elif self.dataset_name == 'MpiSintelFinalInpainting':
-            dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=0.3)
+            dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=self.occlusion_ratio)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
         if not self.overfit:

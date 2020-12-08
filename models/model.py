@@ -218,6 +218,7 @@ class InpaintingStageModel(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.lr = hparams['learning_rate']
+        self.second_order_weight = hparams.get('second_order_weight', 0.0)
         self.model = InpaintingNet()
     
     def forward(self, img):
@@ -235,27 +236,36 @@ class InpaintingStageModel(pl.LightningModule):
         imgs, complete_imgs, occlusion_map = batch
         # inpainting
         pred_imgs = self(complete_imgs * (1 - occlusion_map))
-        
-        loss = charbonnier_loss((pred_imgs - complete_imgs) * occlusion_map, reduction=False).sum() / (3*occlusion_map.sum() + 1e-16)
-        return loss
+        reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
+        second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
+        return reconst_error, second_order_error
     
     
     def training_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'train')
+        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'train')
+        loss = reconst_error + self.second_order_weight * second_order_error
         
+        self.log('train_reconst', reconst_error, logger = True)
+        self.log('train_second_order', second_order_error, logger = True)
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'val')
+        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'val')
+        loss = reconst_error + self.second_order_weight * second_order_error
         
+        self.log('val_reconst', reconst_error, logger = True)
+        self.log('val_second_order', second_order_error, logger = True)
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     def test_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx, 'test')
+        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'test')
+        loss = reconst_error + self.second_order_weight * second_order_error
         
+        self.log('test_reconst', reconst_error, logger = True)
+        self.log('test_second_order', second_order_error, logger = True)
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss
     
