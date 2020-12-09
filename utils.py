@@ -52,6 +52,7 @@ def visualize_inpainting(img, complete_img, predict_img, occlusion_map):
     predict_img = predict_img.detach().cpu().numpy().transpose(1, 2, 0)
     occlusion_map = occlusion_map.detach().cpu().numpy().transpose(1, 2, 0)
     full_img = (1 - occlusion_map) * complete_img + (occlusion_map) * predict_img
+    print('error', (np.abs(predict_img - complete_img) * occlusion_map).sum() / (3 * occlusion_map.sum() + 1e-16))
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 2, 1)
     plt.imshow(img/2.0 + 0.5)

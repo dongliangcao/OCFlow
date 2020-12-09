@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from models.networks.simple_flow_net import SimpleFlowNet
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
@@ -270,7 +271,14 @@ class InpaintingStageModel(pl.LightningModule):
         return loss
     
     def configure_optimizers(self):
-        return Adam(self.parameters(), self.lr)
+        optimizer = Adam(self.parameters(), self.lr)
+        return optimizer
+#         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=20)
+#         return {
+#             'optimizer': optimizer,
+#             'lr_scheduler': scheduler,
+#             'monitor': 'val_reconst'
+#         }
 
 class TwoStageModel(pl.LightningModule):
     """
@@ -367,7 +375,7 @@ class TwoStageModel(pl.LightningModule):
         # calculate the reconstruction error
         photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        smoothness_term = (edge_aware_smoothness_loss(img1, flow_pred, reductiom=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         return photometric_error, reconst_error, smoothness_term
     
     
