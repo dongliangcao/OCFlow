@@ -178,7 +178,7 @@ class FlowStageModel(pl.LightningModule):
         self.log('train_photometric', photometric_error, logger = True)
         self.log('train_smoothness', smoothness_term, logger = True)
         self.log('train_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        self.log('train_flow_error', flow_error, logger = True)
         
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
@@ -194,7 +194,7 @@ class FlowStageModel(pl.LightningModule):
         self.log('val_photometric', photometric_error, logger = True)
         self.log('val_smoothness', smoothness_term, logger = True)
         self.log('val_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        self.log('val_flow_error', flow_error, logger = True)
         
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
@@ -209,7 +209,7 @@ class FlowStageModel(pl.LightningModule):
         self.log('test_photometric', photometric_error, logger = True)
         self.log('test_smoothness', smoothness_term, logger = True)
         self.log('test_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        self.log('test_flow_error', flow_error, logger = True)
         
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss
