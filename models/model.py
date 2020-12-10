@@ -68,9 +68,11 @@ def edge_aware_smoothness_loss(img, flow, alpha=10.0, reduction=True):
     img_dy_norm = torch.norm(img_dy, p=2, dim=1)
     flow_dx_norm = torch.norm(flow_dx, p=2, dim=1)
     flow_dy_norm = torch.norm(flow_dy, p=2, dim=1)
-    loss = (flow_dx_norm) * torch.exp(-alpha * img_dx_norm) + (flow_dy_norm) * torch.exp(-alpha * img_dy_norm)
+    loss_dx = (flow_dx_norm) * torch.exp(-alpha * img_dx_norm)
+    loss_dy = (flow_dy_norm) * torch.exp(-alpha * img_dy_norm)
+    loss = charbonnier_loss(loss_dx, reduction = reduction) + charbonnier_loss(loss_dy, reduction = reduction)
     
-    return charbonnier_loss(loss, reduction=reduction)
+    return loss
 
 class FlowStageModel(pl.LightningModule):
     """
@@ -130,12 +132,10 @@ class FlowStageModel(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
-        if not isinstance(batch, (list, tuple)):
-            imgs = batch
-        elif len(batch) == 2:
-            imgs, _ = batch
+        if len(batch) == 2:
+            imgs, flow = batch
         elif len(batch) == 3:
-            imgs, _, _ = batch
+            imgs, flow, occ = batch
         else:
             raise ValueError('Not supported dataset')
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
@@ -147,7 +147,10 @@ class FlowStageModel(pl.LightningModule):
         photometric_error = charbonnier_loss(img_warped - img1)
         smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
         second_order_error = second_order_photometric_error(img_warped, img1)
-        return photometric_error, smoothness_term, second_order_error
+        #calculate difference between predicted flow and ground truth flow
+        mse_loss = torch.nn.MSELoss()
+        flow_error = mse_loss(flow_pred, flow)
+        return photometric_error, smoothness_term, second_order_error, flow_error
     
     def general_step_occ(self, batch, batch_idx, mode):
         imgs, flow, occ = batch
@@ -160,19 +163,22 @@ class FlowStageModel(pl.LightningModule):
         photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
         second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
         smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
-        
-        return photometric_error, smoothness_term, second_order_error
+        #calculate difference between predicted flow and ground truth flow
+        mse_loss = torch.nn.MSELoss()
+        flow_error = mse_loss(flow_pred, flow)
+        return photometric_error, smoothness_term, second_order_error, flow_error
     
     def training_step(self, batch, batch_idx):
         if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'train')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'train')
         else:
-            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'train')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         self.log('train_photometric', photometric_error, logger = True)
         self.log('train_smoothness', smoothness_term, logger = True)
         self.log('train_second_order', second_order_error, logger = True)
+        self.log('flow_error', flow_error, logger = True)
         
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
@@ -180,28 +186,30 @@ class FlowStageModel(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'val')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'val')
         else:
-            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'val')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         self.log('val_photometric', photometric_error, logger = True)
         self.log('val_smoothness', smoothness_term, logger = True)
         self.log('val_second_order', second_order_error, logger = True)
+        self.log('flow_error', flow_error, logger = True)
         
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     def test_step(self, batch, batch_idx):
         if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error = self.general_step(batch, batch_idx, 'test')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'test')
         else:
-            photometric_error, smoothness_term, second_order_error = self.general_step_occ(batch, batch_idx, 'test')
+            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         self.log('test_photometric', photometric_error, logger = True)
         self.log('test_smoothness', smoothness_term, logger = True)
         self.log('test_second_order', second_order_error, logger = True)
+        self.log('flow_error', flow_error, logger = True)
         
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss
