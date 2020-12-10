@@ -363,7 +363,7 @@ class TwoStageModel(pl.LightningModule):
         elif len(batch) == 2:
             imgs, _ = batch
         elif len(batch) == 3:
-            imgs, _, _ = batch
+            imgs, _, occ = batch
         else:
             raise ValueError('Not supported dataset')
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
@@ -383,35 +383,57 @@ class TwoStageModel(pl.LightningModule):
         # calculate the reconstruction error
         photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        smoothness_term = (edge_aware_smoothness_loss(img1, flow_pred, reductiom=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+        smoothness_term = (edge_aware_smoothness_loss(img1, flow_pred, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+        # calculate BCE error if occ is available
+        if occ is not None:
+            bce_loss = F.binary_cross_entropy(occ_pred, occ)
+            return photometric_error, reconst_error, smoothness_term, bce_loss
         return photometric_error, reconst_error, smoothness_term
     
     
     def training_step(self, batch, batch_idx):
-        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'train')
+        losses = self.general_step(batch, batch_idx, 'train')
+        if len(losses) == 3:
+            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+        else:
+            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
         self.log('train_photometric', photometric_error, logger = True)
         self.log('train_reconst', reconst_error, logger = True)
         self.log('train_flow_smooth', smoothness_term, logger=True)
+        if bce_loss is not None:
+            self.log('train_bce_loss', bce_loss, logger=True)
         self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     
     
     def validation_step(self, batch, batch_idx):
-        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'val')
+        losses = self.general_step(batch, batch_idx, 'val')
+        if len(losses) == 3:
+            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+        else:
+            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
         self.log('val_photometric', photometric_error, logger = True)
         self.log('val_reconst', reconst_error, logger = True)
         self.log('val_flow_smooth', smoothness_term, logger = True)
+        if bce_loss is not None:
+            self.log('val_bce_loss', bce_loss, logger=True)
         self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     
     def test_step(self, batch, batch_idx):
-        photometric_error, reconst_error, smoothness_term = self.general_step(batch, batch_idx, 'test')
+        losses = self.general_step(batch, batch_idx, 'test')
+        if len(losses) == 3:
+            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+        else:
+            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
         self.log('test_photometric', photometric_error, logger = True)
         self.log('test_reconst', reconst_error, logger = True)
         self.log('test_flow_smooth', smoothness_term, logger = True)
+        if bce_loss is not None:
+            self.log('test_bce_loss', bce_loss, logger=True)
         self.log('test_loss', loss, prog_bar= True, logger = True)
         return loss
     

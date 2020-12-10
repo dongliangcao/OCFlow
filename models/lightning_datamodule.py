@@ -43,7 +43,7 @@ class DatasetModule(pl.LightningDataModule):
         if not self.overfit:
             len_trainset = ceil(0.8 * len(dataset))
             len_valset = ceil(0.1 * len(dataset))
-            train_dset, val_dset, test_dset = torch.utils.data.random_split(dataset, [len_trainset, len_valset, len(dataset) - len_trainset - len_valset], generator=torch.Generator().manual_seed(0))
+            train_dset, val_dset, test_dset = torch.utils.data.random_split(dataset, [len_trainset, len_valset, len(dataset) - len_trainset - len_valset], generator=torch.Generator().manual_seed(42))
         else:
             train_dset = val_dset = test_dset = dataset
 
