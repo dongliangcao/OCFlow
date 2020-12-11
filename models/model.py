@@ -550,3 +550,141 @@ class TwoStageModel(pl.LightningModule):
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
         
+class TwoStageModelGC(pl.LightningModule):
+    """
+    Training with two stages with ground truth optical flow:
+    First stage: optical flow and occlusion map prediction
+    Second stage: inpainting network predicts pixel value for the occluded regions 
+    """
+    def __init__(self, hparams):
+        super().__init__()
+        self.hparams = hparams
+        self.lr = hparams['learning_rate']
+        self.reconst_weight = hparams.get('reconst_weight', 2.0)
+        self.occ_pred = SimpleOcclusionNet()
+        self.inpainting = InpaintingNet()
+        inpainting_root = hparams.get('inpainting_root', None)
+        if inpainting_root:
+            self.inpainting.load_state_dict(torch.load(inpainting_root))
+        
+        # we will freeze the inpainting network
+        for param in self.inpainting.parameters():
+            param.requires_grad = False
+        
+    
+    def warp(self, img, flow):
+        """
+        warp an image/tensor (im2) back to im1, according to the optical flow
+
+        x: [B, C, H, W] (im2)
+        flo: [B, 2, H, W] flow
+
+        """
+        B, C, H, W = img.size()
+        # create mesh grid
+        xx = torch.arange(0, W).view(1, -1).repeat(H, 1)
+        yy = torch.arange(0, H).view(-1, 1).repeat(1, W)
+        xx = xx.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        yy = yy.view(1, 1, H, W).repeat(B, 1, 1, 1)
+        grid = torch.cat((xx, yy), 1).float()
+        # cast into cuda
+        if img.is_cuda:
+            grid = grid.cuda()
+        # require gradient
+        grid.requires_grad = True
+        vgrid = grid + flow
+        # scale grid to [-1, 1] to support grid_sample function in pytorch
+        # https://pytorch.org/docs/stable/nn.functional.html#grid-sample
+        vgrid[:,0,:,:] = 2.0 * vgrid[:,0,:,:].clone() / max(W-1, 1) - 1.0
+        vgrid[:,1,:,:] = 2.0 * vgrid[:,1,:,:].clone() / max(H-1, 1) - 1.0
+        # permute vgrid to size [B, H, W, 2] to support grid_sample function
+        vgrid = vgrid.permute(0, 2, 3, 1)
+        
+        output = F.grid_sample(img, vgrid, align_corners=False)
+        
+        return output
+    
+    @property
+    def is_cuda(self):
+        return next(self.parameters()).is_cuda
+    
+    
+    def save_state_dict(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def general_step(self, batch, batch_idx, mode):
+        if not isinstance(batch, (list, tuple)):
+            imgs = batch
+        elif len(batch) == 2:
+            imgs, flow = batch
+        elif len(batch) == 3:
+            imgs, flow, occ = batch
+        else:
+            raise ValueError('Not supported dataset')
+        img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
+        # occlusion prediction
+        occ_pred = self.occ_pred(imgs)
+        # warp image use ground truth optical flow
+        img_warped = self.warp(img2, flow)
+        
+        # get occluded image
+        img_occluded = img_warped * (1 - occ_pred) # 1: occluded 0: non-occluded
+
+        # get completed image
+        img_completed = self.inpainting(img_occluded)
+        
+        # calculate the reconstruction error
+        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+        reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
+        # calculate BCE error if occ is available
+        if occ is not None:
+            bce_loss = F.binary_cross_entropy(occ_pred, occ)
+            return photometric_error, reconst_error, bce_loss
+        return photometric_error, reconst_error
+    
+    
+    def training_step(self, batch, batch_idx):
+        losses = self.general_step(batch, batch_idx, 'train')
+        if len(losses) == 2:
+            photometric_error, reconst_error = losses[0], losses[1]
+        else:
+            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photometric_error + self.reconst_weight * reconst_error
+        self.log('train_photometric', photometric_error, logger = True)
+        self.log('train_reconst', reconst_error, logger = True)
+        if bce_loss is not None:
+            self.log('train_bce_loss', bce_loss, logger=True)
+        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        return loss
+    
+    
+    def validation_step(self, batch, batch_idx):
+        losses = self.general_step(batch, batch_idx, 'val')
+        if len(losses) == 2:
+            photometric_error, reconst_error = losses[0], losses[1]
+        else:
+            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photometric_error + self.reconst_weight * reconst_error
+        self.log('val_photometric', photometric_error, logger = True)
+        self.log('val_reconst', reconst_error, logger = True)
+        if bce_loss is not None:
+            self.log('val_bce_loss', bce_loss, logger=True)
+        self.log('val_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def test_step(self, batch, batch_idx):
+        losses = self.general_step(batch, batch_idx, 'test')
+        if len(losses) == 2:
+            photometric_error, reconst_error = losses[0], losses[1]
+        else:
+            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photometric_error + self.reconst_weight * reconst_error
+        self.log('test_photometric', photometric_error, logger = True)
+        self.log('test_reconst', reconst_error, logger = True)
+        if bce_loss is not None:
+            self.log('test_bce_loss', bce_loss, logger=True)
+        self.log('test_loss', loss, prog_bar= True, logger = True)
+        return loss
+    
+    def configure_optimizers(self):
+        return Adam(self.parameters(), self.lr)
