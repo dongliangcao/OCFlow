@@ -8,6 +8,12 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from models.networks.simple_flow_net import SimpleFlowNet
+from models.networks.flow_net_s import FlowNetS
+from models.networks.flow_net_c import FlowNetC
+from models.networks.cost_volume_flow_net import FlowNetCV
+from models.networks.flow_net import FlowNet
+from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
+
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
 
@@ -85,9 +91,25 @@ class FlowStageModel(pl.LightningModule):
         self.smoothness_weight = hparams.get('smoothness_weight', 0.0)
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
         self.with_occ = hparams.get('with_occ', False)
-        self.flow_pred = SimpleFlowNet()
+        self.log_every_n_steps = 20
         
-        
+        model = self.hparams.get('model', 'simple')
+        if model == 'simple':
+            self.flow_pred = SimpleFlowNet()
+        elif model == 'pwc':
+            self.flow_pred = FlowNetCV()
+        elif model == 'flownets':
+            self.flow_pred = FlowNetS()
+        elif model == 'flownetc':
+            self.flow_pred = FlowNetC()
+        elif model == 'flownet':
+            self.flow_pred = FlowNet()
+        elif model == 'eflownet':
+            self.flow_pred = EFlowNet()
+        elif model == 'eflownet2':
+            self.flow_pred = EFlowNet2()
+        else:
+            raise ValueError(f'Unsupported model: {model}')
     def forward(self, x):
         return self.flow_pred(x)
     
@@ -175,14 +197,29 @@ class FlowStageModel(pl.LightningModule):
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
-        self.log('train_photometric', photometric_error, logger = True)
-        self.log('train_smoothness', smoothness_term, logger = True)
-        self.log('train_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        #self.log('train_photometric', photometric_error, logger = True)
+        #self.log('train_smoothness', smoothness_term, logger = True)
+        #self.log('train_second_order', second_order_error, logger = True)
+        #self.log('train_flow_error', flow_error, logger = True)
         
-        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_smoothness", smoothness_term, global_step = self.global_step)
+            tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_flow_error", flow_error, global_step = self.global_step)
         return loss
     
+    def training_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs:
+            loss = loss + output['loss'].detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
     
     def validation_step(self, batch, batch_idx):
         if not self.with_occ:
@@ -191,13 +228,30 @@ class FlowStageModel(pl.LightningModule):
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
-        self.log('val_photometric', photometric_error, logger = True)
-        self.log('val_smoothness', smoothness_term, logger = True)
-        self.log('val_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        #self.log('val_photometric', photometric_error, logger = True)
+        #self.log('val_smoothness', smoothness_term, logger = True)
+        #self.log('val_second_order', second_order_error, logger = True)
+        #self.log('val_flow_error', flow_error, logger = True)
         
-        self.log('val_loss', loss, prog_bar= True, logger = True)
+        #self.log('val_loss', loss, prog_bar= True, logger = True)
+        if batch_idx == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_smoothness", smoothness_term, global_step = self.global_step)
+            tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_flow_error", flow_error, global_step = self.global_step)
         return loss
+
+    def validation_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
+            
     
     def test_step(self, batch, batch_idx):
         if not self.with_occ:
@@ -206,13 +260,28 @@ class FlowStageModel(pl.LightningModule):
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
-        self.log('test_photometric', photometric_error, logger = True)
-        self.log('test_smoothness', smoothness_term, logger = True)
-        self.log('test_second_order', second_order_error, logger = True)
-        self.log('flow_error', flow_error, logger = True)
+        #self.log('test_photometric', photometric_error, logger = True)
+        #self.log('test_smoothness', smoothness_term, logger = True)
+        #self.log('test_second_order', second_order_error, logger = True)
+        #self.log('test_flow_error', flow_error, logger = True)
         
-        self.log('test_loss', loss, prog_bar= True, logger = True)
+        #self.log('test_loss', loss, prog_bar= True, logger = True)
+        if batch_idx == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_smoothness", smoothness_term, global_step = self.global_step)
+            tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_flow_error", flow_error, global_step = self.global_step)
         return loss
+    def test_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
