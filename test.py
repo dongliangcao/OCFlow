@@ -5,6 +5,7 @@ from models.occlusion_model import OcclusionModel
 from models.flow_occ_model import FlowOccModel
 from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning import loggers as pl_loggers
 import argparse
 import torch
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
@@ -18,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, help='Type of model', default='simple')
     parser.add_argument('--epochs', type=int, help='Epochs to train', default=100)
     parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
-    
+    parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3) 
     parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
     parser.add_argument('--root', type=str, help='Data root')
     parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0)
@@ -56,9 +57,10 @@ if __name__ == '__main__':
     patience=60,
     verbose=False,
     mode='min')
+    tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args.find_best_lr: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, callbacks=[early_stop_callback], overfit_batches=args.overfit_batches)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger)
         trainer.fit(model, datamodule = data_module)
     else: 
         trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)

@@ -298,6 +298,7 @@ class InpaintingStageModel(pl.LightningModule):
         self.lr = hparams['learning_rate']
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
         self.model = InpaintingNet()
+        self.log_every_n_steps = 20
     
     def forward(self, img):
         return self.model(img)
@@ -323,29 +324,69 @@ class InpaintingStageModel(pl.LightningModule):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'train')
         loss = reconst_error + self.second_order_weight * second_order_error
         
-        self.log('train_reconst', reconst_error, logger = True)
-        self.log('train_second_order', second_order_error, logger = True)
-        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        #self.log('train_reconst', reconst_error, logger = True)
+        #self.log('train_second_order', second_order_error, logger = True)
+        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
         return loss
+    def training_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs:
+            loss = loss + output['loss'].detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'val')
         loss = reconst_error + self.second_order_weight * second_order_error
         
-        self.log('val_reconst', reconst_error, logger = True)
-        self.log('val_second_order', second_order_error, logger = True)
-        self.log('val_loss', loss, prog_bar= True, logger = True)
+        #self.log('val_reconst', reconst_error, logger = True)
+        #self.log('val_second_order', second_order_error, logger = True)
+        #self.log('val_loss', loss, prog_bar= True, logger = True)
+        if batch_idx == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
         return loss
+    def validation_epoch_end(self,outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
     
     def test_step(self, batch, batch_idx):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'test')
         loss = reconst_error + self.second_order_weight * second_order_error
         
-        self.log('test_reconst', reconst_error, logger = True)
-        self.log('test_second_order', second_order_error, logger = True)
-        self.log('test_loss', loss, prog_bar= True, logger = True)
+        #self.log('test_reconst', reconst_error, logger = True)
+        #self.log('test_second_order', second_order_error, logger = True)
+        #self.log('test_loss', loss, prog_bar= True, logger = True)
+        if batch_idx == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
         return loss
+    def test_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), self.lr)

@@ -67,19 +67,46 @@ class FlowModel(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'train')
-        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
+    def training_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs:
+            loss = loss + output['loss'].detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'val')
-        self.log('val_loss', loss, prog_bar= True, logger = True)
+        #self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
+    def validation_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
     
     def test_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'test')
-        self.log('test_loss', loss, prog_bar= True, logger= True)
+        #self.log('test_loss', loss, prog_bar= True, logger= True)
         return loss
+    def test_epoch_end(self, outputs): 
+        loss = 0.0
+        count = 0
+        for output in outputs: 
+            loss = loss + output.detach().cpu().item()
+            count = count +1 
+        loss = loss / count
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
