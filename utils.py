@@ -56,6 +56,7 @@ def visualize_inpainting(img, complete_img, predict_img, occlusion_map):
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 2, 1)
     plt.imshow(img/2.0 + 0.5)
+    plt.axis('off')
     plt.title('occluded image')
 
     plt.subplot(2, 2, 2)
@@ -72,6 +73,35 @@ def visualize_inpainting(img, complete_img, predict_img, occlusion_map):
     plt.imshow(full_img/2.0 + 0.5)
     plt.axis('off')
     plt.title('complete image')
+    plt.show()
+    
+def visualize_occ(imgs, occ, pred_occ):
+    img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
+    img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
+    img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
+    occ = occ.detach().cpu().numpy().transpose(1, 2, 0)
+    pred_occ = pred_occ.detach().cpu().numpy().transpose(1, 2, 0)
+    
+    plt.figure(figsize=(12, 6))
+    plt.subplot(2, 2, 1)
+    plt.imshow(img1/2.0 + 0.5)
+    plt.axis('off')
+    plt.title('image 1')
+
+    plt.subplot(2, 2, 2)
+    plt.imshow(img2/2.0 + 0.5)
+    plt.axis('off')
+    plt.title('image 2')
+
+    plt.subplot(2, 2, 3)
+    plt.imshow(occ, cmap='gray')
+    plt.axis('off')
+    plt.title('ground truth occlusion')
+    
+    plt.subplot(2, 2, 4)
+    plt.imshow(pred_occ, cmap='gray')
+    plt.axis('off')
+    plt.title('predicted occlusion')
     plt.show()
     
 def visualize_flow(imgs, img_pred_warped, img_warped, predicted_flow, flow):    
