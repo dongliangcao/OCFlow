@@ -117,7 +117,7 @@ def visualize_flow(imgs, img_pred_warped, img_warped, predicted_flow, flow):
     plt.title('optical flow')
     plt.show()
     
-def visualize(imgs, img_pred_warped, img_warped, img_occluded, img_completed, pred_flow, flow, occ, img_inpainted):    
+def visualize(imgs, img_pred_warped, img_warped, img_occluded, img_completed, pred_flow, flow, pred_occ, occ):    
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
     img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
     img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
@@ -130,7 +130,7 @@ def visualize(imgs, img_pred_warped, img_warped, img_occluded, img_completed, pr
     flow = flow.detach().cpu().numpy().transpose(1, 2, 0)
     flow_viz = flow2img(flow)
     occ = occ.detach().cpu().numpy().transpose(1, 2, 0)
-    img_inpainted = img_inpainted.detach().cpu().numpy().transpose(1, 2, 0)
+    pred_occ = pred_occ.detach().cpu().numpy().transpose(1, 2, 0)
     
     plt.figure(figsize=(12, 15))
     plt.subplot(5, 2, 1)
@@ -179,9 +179,9 @@ def visualize(imgs, img_pred_warped, img_warped, img_occluded, img_completed, pr
     plt.title('pred occlusion')
     
     plt.subplot(5, 2, 10)
-    plt.imshow(img_inpainted/2.0 + 0.5)
+    plt.imshow(pred_occ, cmap='gray')
     plt.axis('off')
-    plt.title('inpainted image')
+    plt.title('occlusion')
 #     print('epe error for predicted flow:', evaluate_flow(pred_flow, flow))
 #     print('photometric error for predicted flow',np.abs(img_pred_warped - img1).mean())
 #     print('photometric error for ground truth flow', np.abs(img_warped - img1).mean())
