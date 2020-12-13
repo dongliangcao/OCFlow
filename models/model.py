@@ -197,12 +197,6 @@ class FlowStageModel(pl.LightningModule):
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
-        #self.log('train_photometric', photometric_error, logger = True)
-        #self.log('train_smoothness', smoothness_term, logger = True)
-        #self.log('train_second_order', second_order_error, logger = True)
-        #self.log('train_flow_error', flow_error, logger = True)
-        
-        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
@@ -212,14 +206,9 @@ class FlowStageModel(pl.LightningModule):
         return loss
     
     def training_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs:
-            loss = loss + output['loss'].detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     def validation_step(self, batch, batch_idx):
         if not self.with_occ:
@@ -227,13 +216,7 @@ class FlowStageModel(pl.LightningModule):
         else:
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
-        
-        #self.log('val_photometric', photometric_error, logger = True)
-        #self.log('val_smoothness', smoothness_term, logger = True)
-        #self.log('val_second_order', second_order_error, logger = True)
-        #self.log('val_flow_error', flow_error, logger = True)
-        
-        #self.log('val_loss', loss, prog_bar= True, logger = True)
+
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
@@ -243,15 +226,10 @@ class FlowStageModel(pl.LightningModule):
         return loss
 
     def validation_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
-            
+        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)    
     
     def test_step(self, batch, batch_idx):
         if not self.with_occ:
@@ -260,12 +238,6 @@ class FlowStageModel(pl.LightningModule):
             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
-        #self.log('test_photometric', photometric_error, logger = True)
-        #self.log('test_smoothness', smoothness_term, logger = True)
-        #self.log('test_second_order', second_order_error, logger = True)
-        #self.log('test_flow_error', flow_error, logger = True)
-        
-        #self.log('test_loss', loss, prog_bar= True, logger = True)
         if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
@@ -274,14 +246,9 @@ class FlowStageModel(pl.LightningModule):
             tensorboard.add_scalar("test_flow_error", flow_error, global_step = self.global_step)
         return loss
     def test_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
@@ -323,10 +290,6 @@ class InpaintingStageModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'train')
         loss = reconst_error + self.second_order_weight * second_order_error
-        
-        #self.log('train_reconst', reconst_error, logger = True)
-        #self.log('train_second_order', second_order_error, logger = True)
-        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
 
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
@@ -334,59 +297,39 @@ class InpaintingStageModel(pl.LightningModule):
             tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
         return loss
     def training_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs:
-            loss = loss + output['loss'].detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'val')
         loss = reconst_error + self.second_order_weight * second_order_error
         
-        #self.log('val_reconst', reconst_error, logger = True)
-        #self.log('val_second_order', second_order_error, logger = True)
-        #self.log('val_loss', loss, prog_bar= True, logger = True)
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
             tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
         return loss
     def validation_epoch_end(self,outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
-    
+        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
+
     def test_step(self, batch, batch_idx):
         reconst_error, second_order_error = self.general_step(batch, batch_idx, 'test')
         loss = reconst_error + self.second_order_weight * second_order_error
         
-        #self.log('test_reconst', reconst_error, logger = True)
-        #self.log('test_second_order', second_order_error, logger = True)
-        #self.log('test_loss', loss, prog_bar= True, logger = True)
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
             tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
         return loss
     def test_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), self.lr)

@@ -67,7 +67,6 @@ class FlowModel(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'train')
-        #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     def training_epoch_end(self, outputs): 
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
@@ -77,16 +76,16 @@ class FlowModel(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'val')
-        #self.log('val_loss', loss, prog_bar= True, logger = True)
+        
         return loss
     def validation_epoch_end(self, outputs): 
         avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
     
     def test_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'test')
-        #self.log('test_loss', loss, prog_bar= True, logger= True)
         return loss
     def test_epoch_end(self, outputs): 
         avg_loss = torch.stack([x for x in outputs]).mean()

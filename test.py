@@ -6,6 +6,7 @@ from models.flow_occ_model import FlowOccModel
 from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import ModelCheckpoint
 import argparse
 import torch
 # flow occ model should be ['simple', 'flowoccnets', 'flowoccnetc', 'pwoc', 'flowoccnet']
@@ -51,19 +52,25 @@ if __name__ == '__main__':
     data_module = DatasetModule(root=args.root,image_size= image_size, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
     data_module.setup()
-    #specify early stopping
-    early_stop_callback = EarlyStopping(monitor='val_loss',
+    #specify early stopping callbacks
+    early_stop_callback = EarlyStopping(monitor='monitored_loss',
     min_delta=0.00,
     patience=60,
     verbose=False,
     mode='min')
+    #specify checkpoint callbacks
+    checkpoint_callback = ModelCheckpoint(
+    monitor='monitored_loss',
+    save_top_k=1,
+    mode='min',verbose = True)
+    #specify logger
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args.find_best_lr: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger, callbacks =[checkpoint_callback])
         trainer.fit(model, datamodule = data_module)
     else: 
-        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger)
+        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger, callbacks =[checkpoint_callback])
         lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
