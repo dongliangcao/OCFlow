@@ -56,7 +56,9 @@ if __name__ == '__main__':
         trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger)
         trainer.fit(model, datamodule = data_module)
     else: 
-        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs)
+        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger)
         lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
+        model.hparams['lr'] = suggested_lr
+        trainer.fit(model, datamodule = data_module)

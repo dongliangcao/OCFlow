@@ -70,14 +70,9 @@ class FlowModel(pl.LightningModule):
         #self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
         return loss
     def training_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs:
-            loss = loss + output['loss'].detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"train_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
@@ -85,28 +80,18 @@ class FlowModel(pl.LightningModule):
         #self.log('val_loss', loss, prog_bar= True, logger = True)
         return loss
     def validation_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"val_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
     
     def test_step(self, batch, batch_idx):
         loss = self.general_step(batch, batch_idx, 'test')
         #self.log('test_loss', loss, prog_bar= True, logger= True)
         return loss
     def test_epoch_end(self, outputs): 
-        loss = 0.0
-        count = 0
-        for output in outputs: 
-            loss = loss + output.detach().cpu().item()
-            count = count +1 
-        loss = loss / count
+        avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"test_loss": loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
