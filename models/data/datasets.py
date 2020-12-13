@@ -84,7 +84,7 @@ class FreeFormRandomOcclusion:
                 angle = 0.01 + np.random.randint(self.mangle)
                 if i % 2 == 0:
                     angle = 2 * np.pi - angle
-                length = 5 + np.random.randint(self.mlen)
+                length = 10 + np.random.randint(self.mlen)
                 brush_w = 5 + np.random.randint(self.mbw)
                 end_x = (start_x + length * np.sin(angle)).astype(np.int32)
                 end_y = (start_y + length * np.cos(angle)).astype(np.int32)
