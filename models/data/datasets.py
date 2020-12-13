@@ -6,6 +6,8 @@ import os
 from os.path import *
 import numpy as np
 
+import cv2
+
 from glob import glob
 from .utils import frame_utils
 
@@ -59,9 +61,40 @@ class StaticRandomOcclusion:
         self.w1 = np.random.randint(0, w - self.tw)
         
     def __call__(self, img):
-        occlusion_map = np.zeros(shape=(img.shape[0], img.shape[1], 1), dtype=np.float32)
-        occlusion_map[self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw), :] = 1.0 # 1: occluded pixels
-        img[self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw), :] = 0.0
+        occlusion_map = torch.zeros(1, img.shape[1], img.shape[2], dtype=torch.float32)
+        occlusion_map[:, self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw)] = 1.0 # 1: occluded pixels
+        img[:, self.h1:(self.h1+self.th), self.w1:(self.w1+self.tw)] = 0.0
+        return img, occlusion_map
+    
+class FreeFormRandomOcclusion:
+    def __init__(self, max_vertices=4, max_brush_width=3, max_len=30, max_angle=np.pi):
+        self.max_v = max_vertices
+        self.mbw = max_brush_width
+        self.mlen = max_len
+        self.mangle = max_angle
+        
+    def __call__(self, img):
+        occlusion_map = np.zeros(shape=(img.shape[1], img.shape[2]))
+        num_v = 6 + np.random.randint(self.max_v)
+
+        for i in range(num_v):
+            start_x = np.random.randint(img.shape[2])
+            start_y = np.random.randint(img.shape[1])
+            for j in range(1 + np.random.randint(5)):
+                angle = 0.01 + np.random.randint(self.mangle)
+                if i % 2 == 0:
+                    angle = 2 * np.pi - angle
+                length = 5 + np.random.randint(self.mlen)
+                brush_w = 5 + np.random.randint(self.mbw)
+                end_x = (start_x + length * np.sin(angle)).astype(np.int32)
+                end_y = (start_y + length * np.cos(angle)).astype(np.int32)
+
+                cv2.line(occlusion_map, (start_y, start_x), (end_y, end_x), 1.0, brush_w)
+                start_x, start_y = end_x, end_y
+                
+        occlusion_map = occlusion_map.reshape((1,)+occlusion_map.shape).astype(np.float32)
+        occlusion_map = torch.from_numpy(occlusion_map)
+        img = torch.where(occlusion_map == 0.0, img, torch.zeros_like(img))
         return img, occlusion_map
     
 class MpiSintel(Dataset):
@@ -345,12 +378,12 @@ class MpiSintelFinalFlowOcc(MpiSintelFlowOcc):
         super().__init__(transform=transform, root=root, dstype='final', replicates=replicates, image_size=image_size, stack_imgs= stack_imgs)
                 
 class MpiSintelInpainting(Dataset):
-    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, occlusion_ratio=0.5):
+    def __init__(self, transform=transforms.ToTensor(), root='', dstype='clean', replicates=1, image_size=None, occlusion_ratio=0.5, static_occ=True):
         self.transform = transform
         self.replicates = replicates
         self.image_size =image_size
         self.occlusion_ratio = occlusion_ratio
-        
+        self.static_occ = static_occ
         image_root = join(root, dstype)
         
         self.image_list = sorted(glob(join(image_root, '*/*.png')))
@@ -372,16 +405,14 @@ class MpiSintelInpainting(Dataset):
 
             img = frame_utils.read_gen(self.image_list[index])
 
+            
             h, w = img.shape[:2]
-
             cropper = StaticCenterCrop((h, w), self.render_size)
             img = cropper(img)
             
             complete_img = img.copy()
-            th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
-            occ = StaticRandomOcclusion((h, w), (th, tw))
-            img, occlusion_map = occ(img)
-            occlusion_map = torch.from_numpy(occlusion_map.transpose(2, 0, 1))
+            
+            
             if self.transform:
                 img = self.transform(img)
                 complete_img = self.transform(complete_img)
@@ -390,22 +421,27 @@ class MpiSintelInpainting(Dataset):
                 resize = transforms.Resize(self.image_size)
                 img = resize(img)
                 complete_img = resize(complete_img)
-                occlusion_map = resize(occlusion_map)
-            occlusion_map[occlusion_map > 0.5] = 1.0
-            occlusion_map[occlusion_map != 1.0] = 0.0
-
+            
+            if self.static_occ:
+                h, w = img.shape[1], img.shape[2]
+                th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
+                occ = StaticRandomOcclusion((h, w), (th, tw))
+            else:
+                occ = FreeFormRandomOcclusion()
+            img, occlusion_map = occ(img)
+            
             return img, complete_img, occlusion_map
     
     def __len__(self):
         return self.size * self.replicates
     
 class MpiSintelCleanInpainting(MpiSintelInpainting):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5):
-        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5, static_occ=False):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio, static_occ=static_occ)
 
 class MpiSintelFinalInpainting(MpiSintelInpainting):
-    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5):
-        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio)
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5, static_occ=False):
+        super().__init__(transform=transform, root=root, dstype='clean', replicates=replicates, image_size=image_size, occlusion_ratio=occlusion_ratio, static_occ=static_occ)
 
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
