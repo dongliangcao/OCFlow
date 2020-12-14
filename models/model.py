@@ -353,7 +353,7 @@ class TwoStageModel(pl.LightningModule):
         self.lr = hparams['learning_rate']
         self.smoothness_weight = hparams.get('smoothness_weight', 0.0)
         self.reconst_weight = hparams.get('reconst_weight', 1.0)
-        self.log_every_n_steps = hparams['log_every_n_steps']
+        self.log_every_n_steps = hparams.get('log_every_n_steps', 1)
         
         flow_root = hparams.get('flow_root', None)
         inpainting_root = hparams.get('inpainting_root', None)
@@ -434,12 +434,10 @@ class TwoStageModel(pl.LightningModule):
         # get completed image
         img_completed = self.inpainting(img_occluded)
         
-        # calculate the reconstruction error
-        #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
-        #reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
+        # calculate the errors
         smoothness_term = (edge_aware_smoothness_loss(img1, flow_pred, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
-        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).mean()
-        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=False).mean()
+        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=True)
+        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=True)
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred, occ)
@@ -525,7 +523,7 @@ class TwoStageModelGC(pl.LightningModule):
         self.hparams = hparams
         self.lr = hparams['learning_rate']
         self.reconst_weight = hparams.get('reconst_weight', 1.0)
-        self.log_every_n_steps = hparams['log_every_n_steps']
+        self.log_every_n_steps = hparams.get('log_every_n_steps', 1)
         self.occ_pred = SimpleOcclusionNet()
         self.inpainting = InpaintingNet()
         inpainting_root = hparams.get('inpainting_root', None)
@@ -601,8 +599,8 @@ class TwoStageModelGC(pl.LightningModule):
         # calculate the reconstruction error
         #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         #reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).mean() 
-        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=False).mean()
+        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=True) 
+        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=True)
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred, occ)

@@ -5,6 +5,18 @@ import torch.nn.functional as F
 
 from models.data.utils.flow_utils import flow2img, evaluate_flow
 
+def charbonnier_loss(loss, alpha=0.001, reduction=True):
+    """
+    Args:
+        loss: torch.Tensor
+    Return:
+        cb_loss: torch.Tensor, charbonnier_loss
+    """
+    cb_loss = torch.sqrt(loss**2 + alpha**2)
+    if reduction:
+        cb_loss = cb_loss.mean()
+    return cb_loss
+
 def warp(img, flow, is_mask=False):
         """
         warp an image/tensor (im2) back to im1, according to the optical flow

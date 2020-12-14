@@ -67,7 +67,7 @@ class StaticRandomOcclusion:
         return img, occlusion_map
     
 class FreeFormRandomOcclusion:
-    def __init__(self, max_vertices=4, max_brush_width=3, max_len=30, max_angle=np.pi):
+    def __init__(self, max_vertices=4, max_brush_width=3, max_len=30, max_angle=2*np.pi):
         self.max_v = max_vertices
         self.mbw = max_brush_width
         self.mlen = max_len
@@ -81,7 +81,7 @@ class FreeFormRandomOcclusion:
             start_x = np.random.randint(img.shape[2])
             start_y = np.random.randint(img.shape[1])
             for j in range(1 + np.random.randint(5)):
-                angle = 0.01 + np.random.randint(self.mangle)
+                angle = np.random.randint(self.mangle)
                 if i % 2 == 0:
                     angle = 2 * np.pi - angle
                 length = 10 + np.random.randint(self.mlen)
