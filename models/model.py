@@ -353,6 +353,7 @@ class TwoStageModel(pl.LightningModule):
         self.lr = hparams['learning_rate']
         self.smoothness_weight = hparams.get('smoothness_weight', 0.0)
         self.reconst_weight = hparams.get('reconst_weight', 2.0)
+        self.log_every_n_steps = 20
         
         flow_root = hparams.get('flow_root', None)
         inpainting_root = hparams.get('inpainting_root', None)
@@ -451,13 +452,19 @@ class TwoStageModel(pl.LightningModule):
         else:
             photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
-        self.log('train_photometric', photometric_error, logger = True)
-        self.log('train_reconst', reconst_error, logger = True)
-        self.log('train_flow_smooth', smoothness_term, logger=True)
-        if bce_loss is not None:
-            self.log('train_bce_loss', bce_loss, logger=True)
-        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_smoothness", smoothness_term, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("train_bce_loss", bce_loss, global_step = self.global_step)
         return loss
+    def training_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
@@ -467,14 +474,20 @@ class TwoStageModel(pl.LightningModule):
         else:
             photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
-        self.log('val_photometric', photometric_error, logger = True)
-        self.log('val_reconst', reconst_error, logger = True)
-        self.log('val_flow_smooth', smoothness_term, logger = True)
-        if bce_loss is not None:
-            self.log('val_bce_loss', bce_loss, logger=True)
-        self.log('val_loss', loss, prog_bar= True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_smoothness", smoothness_term, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("val_bce_loss", bce_loss, global_step = self.global_step)
         return loss
     
+    def validation_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
+
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
         if len(losses) == 3:
@@ -482,14 +495,20 @@ class TwoStageModel(pl.LightningModule):
         else:
             photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
-        self.log('test_photometric', photometric_error, logger = True)
-        self.log('test_reconst', reconst_error, logger = True)
-        self.log('test_flow_smooth', smoothness_term, logger = True)
-        if bce_loss is not None:
-            self.log('test_bce_loss', bce_loss, logger=True)
-        self.log('test_loss', loss, prog_bar= True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_smoothness", smoothness_term, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("test_bce_loss", bce_loss, global_step = self.global_step)
         return loss
-    
+
+    def test_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
+
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
         
@@ -593,12 +612,18 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
         loss = photometric_error + self.reconst_weight * reconst_error
-        self.log('train_photometric', photometric_error, logger = True)
-        self.log('train_reconst', reconst_error, logger = True)
-        if bce_loss is not None:
-            self.log('train_bce_loss', bce_loss, logger=True)
-        self.log('train_loss', loss, prog_bar = True, on_step = True, on_epoch = True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("train_bce_loss", bce_loss, global_step = self.global_step)
         return loss
+
+    def training_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     
     def validation_step(self, batch, batch_idx):
@@ -608,12 +633,18 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
         loss = photometric_error + self.reconst_weight * reconst_error
-        self.log('val_photometric', photometric_error, logger = True)
-        self.log('val_reconst', reconst_error, logger = True)
-        if bce_loss is not None:
-            self.log('val_bce_loss', bce_loss, logger=True)
-        self.log('val_loss', loss, prog_bar= True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("val_bce_loss", bce_loss, global_step = self.global_step)
         return loss
+    
+    def validation_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
     
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
@@ -622,12 +653,18 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
         loss = photometric_error + self.reconst_weight * reconst_error
-        self.log('test_photometric', photometric_error, logger = True)
-        self.log('test_reconst', reconst_error, logger = True)
-        if bce_loss is not None:
-            self.log('test_bce_loss', bce_loss, logger=True)
-        self.log('test_loss', loss, prog_bar= True, logger = True)
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
+            if bce_loss is not None:
+                tensorboard.add_scalar("test_bce_loss", bce_loss, global_step = self.global_step)
         return loss
+
+    def test_epoch_end(self, outputs): 
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
