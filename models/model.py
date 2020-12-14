@@ -361,7 +361,7 @@ class TwoStageModel(pl.LightningModule):
         self.occ_pred = SimpleOcclusionNet()
         self.inpainting = InpaintingNet()
         if flow_root:
-            self.flow_pred = FlowStageModel.load_from_checkpoint(flow_root).model
+            self.flow_pred = FlowStageModel.load_from_checkpoint(flow_root).flow_pred
         if inpainting_root:
             self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
         
@@ -474,7 +474,7 @@ class TwoStageModel(pl.LightningModule):
         else:
             photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
-        if self.global_step % self.log_every_n_steps == 0: 
+        if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
             tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
@@ -487,6 +487,7 @@ class TwoStageModel(pl.LightningModule):
         avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
@@ -495,7 +496,7 @@ class TwoStageModel(pl.LightningModule):
         else:
             photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
         loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
-        if self.global_step % self.log_every_n_steps == 0: 
+        if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
@@ -636,7 +637,7 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
         loss = photometric_error + self.reconst_weight * reconst_error
-        if self.global_step % self.log_every_n_steps == 0: 
+        if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
             tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
@@ -648,7 +649,8 @@ class TwoStageModelGC(pl.LightningModule):
         avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
-    
+        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
+
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
         if len(losses) == 2:
@@ -656,7 +658,7 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
         loss = photometric_error + self.reconst_weight * reconst_error
-        if self.global_step % self.log_every_n_steps == 0: 
+        if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
