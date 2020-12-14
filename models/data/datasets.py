@@ -427,7 +427,10 @@ class MpiSintelInpainting(Dataset):
                 th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
                 occ = StaticRandomOcclusion((h, w), (th, tw))
             else:
-                occ = FreeFormRandomOcclusion()
+                h, w = img.shape[1], img.shape[2]
+                max_brush_width = int(0.05 * h)
+                max_len = int(0.5 * h)
+                occ = FreeFormRandomOcclusion(max_brush_width=max_brush_width, max_len=max_len)
             img, occlusion_map = occ(img)
             
             return img, complete_img, occlusion_map
