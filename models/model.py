@@ -16,6 +16,7 @@ from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
 
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
+from models.networks.gated_conv_inpainting_net import InpaintSANet
 
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
@@ -264,7 +265,11 @@ class InpaintingStageModel(pl.LightningModule):
         self.hparams = hparams
         self.lr = hparams['learning_rate']
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
-        self.model = InpaintingNet()
+        model = hparams.get('model', 'simple')
+        if model == 'simple':
+            self.model = InpaintingNet()
+        else:
+            self.model = InpaintSANet()
         self.log_every_n_steps = 20
     
     @property

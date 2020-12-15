@@ -229,7 +229,7 @@ class InpaintSANet(torch.nn.Module):
 
             GatedConv2dWithActivation(cnum, cnum//2, 3, 1, padding=get_pad(img_size, 3, 1)),
             #Self_Attn(cnum//2),
-            GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(img_size, 3, 1), activation=None)
+            GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(img_size, 3, 1), activation=nn.Tanh())
         )
         # refine prediction network
         self.refine_conv_net = nn.Sequential(
@@ -263,7 +263,7 @@ class InpaintSANet(torch.nn.Module):
 
             GatedConv2dWithActivation(cnum, cnum//2, 3, 1, padding=get_pad(img_size, 3, 1)),
             #Self_Attn(cnum, 'relu'),
-            GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(img_size, 3, 1), activation=None),
+            GatedConv2dWithActivation(cnum//2, 3, 3, 1, padding=get_pad(img_size, 3, 1), activation=nn.Tanh()),
         )
 
 
@@ -273,7 +273,7 @@ class InpaintSANet(torch.nn.Module):
         input_imgs = torch.cat([masked_imgs, masks], dim=1)
         
         x = self.coarse_net(input_imgs)
-        x = torch.clamp(x, -1., 1.)
+#         x = torch.clamp(x, -1., 1.)
         coarse_x = x
         
         # Refine
@@ -282,8 +282,8 @@ class InpaintSANet(torch.nn.Module):
         x = self.refine_conv_net(input_imgs)
         x = self.refine_attn(x)
         x = self.refine_upsample_net(x)
-        x = torch.clamp(x, -1., 1.)
-        return coarse_x, x
+#         x = torch.clamp(x, -1., 1.)
+        return x
     
 class InpaintSADirciminator(nn.Module):
     def __init__(self, n_in_channel=4, img_size=(64, 128)):
