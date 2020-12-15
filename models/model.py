@@ -267,9 +267,6 @@ class InpaintingStageModel(pl.LightningModule):
         self.model = InpaintingNet()
         self.log_every_n_steps = 20
     
-    def forward(self, img):
-        return self.model(img)
-    
     @property
     def is_cuda(self):
         return next(self.parameters()).is_cuda
@@ -281,7 +278,7 @@ class InpaintingStageModel(pl.LightningModule):
     def general_step(self, batch, batch_idx, mode):
         imgs, complete_imgs, occlusion_map = batch
         # inpainting
-        pred_imgs = self(complete_imgs * (1 - occlusion_map))
+        pred_imgs = self.model(complete_imgs, occlusion_map)
         reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         return reconst_error, second_order_error

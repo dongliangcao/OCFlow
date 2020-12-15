@@ -56,7 +56,7 @@ class Upsample(nn.Module):
         return x
         
 class InpaintingNet(nn.Module):
-    def __init__(self, in_channels=3):
+    def __init__(self, in_channels=4):
         super().__init__()
         ## Encoder part
         self.down1 = Downsample(in_channels, 32, kernel_size=7, proj_ratio=1)
@@ -72,7 +72,7 @@ class InpaintingNet(nn.Module):
         self.up3 = Upsample(128+128, 128, proj_ratio=8) # skip-connected with output from down3
         self.up4 = Upsample(128+64, 64) # skip-connected with output from down2
         self.up5 = Upsample(64+32, 32) # skip-connected with output from down1
-        self.up6 = Upsample(32+in_channels, in_channels, activation=False) # skip-connected with output from input
+        self.up6 = Upsample(32+3, 3, activation=False) # skip-connected with output from input
         self.tanh = nn.Tanh()
         
         for m in self.modules():
@@ -81,9 +81,11 @@ class InpaintingNet(nn.Module):
                     init.uniform_(m.bias)
                 init.xavier_uniform_(m.weight)
         
-    def forward(self, img):
+    def forward(self, imgs, masks):
+        masked_imgs = imgs * (1 - masks)
+        input_imgs = torch.cat([masked_imgs, masks], dim=1)
         # encoder
-        x1 = self.down1(img) 
+        x1 = self.down1(input_imgs) 
         x2 = self.down2(x1)
         x3 = self.down3(x2)
         x4 = self.down4(x3)
@@ -95,7 +97,7 @@ class InpaintingNet(nn.Module):
         x = self.up3(x, x3)
         x = self.up4(x, x2)
         x = self.up5(x, x1)
-        x = self.up6(x, img)
+        x = self.up6(x, masked_imgs)
         x = self.tanh(x)
         
         return x
