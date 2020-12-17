@@ -16,6 +16,7 @@ from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
 from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
+from models.networks.gated_conv_inpainting_net import InpaintSANet
 
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
@@ -264,11 +265,12 @@ class InpaintingStageModel(pl.LightningModule):
         self.hparams = hparams
         self.lr = hparams['learning_rate']
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
-        self.model = InpaintingNet()
+        model = hparams.get('model', 'simple')
+        if model == 'simple':
+            self.model = InpaintingNet()
+        else:
+            self.model = InpaintSANet()
         self.log_every_n_steps = 20
-    
-    def forward(self, img):
-        return self.model(img)
     
     @property
     def is_cuda(self):
@@ -281,7 +283,7 @@ class InpaintingStageModel(pl.LightningModule):
     def general_step(self, batch, batch_idx, mode):
         imgs, complete_imgs, occlusion_map = batch
         # inpainting
-        pred_imgs = self(complete_imgs * (1 - occlusion_map))
+        pred_imgs = self.model(complete_imgs, occlusion_map)
         reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         return reconst_error, second_order_error
