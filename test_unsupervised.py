@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--reconst_weight', type=float, help='Weight for reconstruction loss', default=2.0)
     parser.add_argument('--with_occ', action = 'store_true', help='Training flownet with ground truth occlusion mask or not')
     parser.add_argument('--flow_root', type=str, help='Path to flow model checkpoint', default=None)
+    parser.add_argument('--supervised_flow', action = 'store_true', help='Used trained supervised model in TwoStageModel instead of unsupervised one')
     parser.add_argument('--inpainting_root', type=str, help='Path to inpainting model checkpoint', default=None)
     
 
@@ -54,6 +55,10 @@ if __name__ == '__main__':
         if hparams['model'] == 'no_gt_flow': 
             hparams['smoothness_weight'] = args.smoothness_weight
             hparams['flow_root'] = args.flow_root
+            if args.supervised_flow: 
+                hparams['supervised_flow'] = True
+            else: 
+                hparams['supervised_flow'] = False
             model = TwoStageModel(hparams=hparams)
         else: 
             model = TwoStageModelGC(hparams=hparams)

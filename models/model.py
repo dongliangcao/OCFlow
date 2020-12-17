@@ -13,7 +13,7 @@ from models.networks.flow_net_c import FlowNetC
 from models.networks.cost_volume_flow_net import FlowNetCV
 from models.networks.flow_net import FlowNet
 from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
-
+from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
 
@@ -357,11 +357,15 @@ class TwoStageModel(pl.LightningModule):
         
         flow_root = hparams.get('flow_root', None)
         inpainting_root = hparams.get('inpainting_root', None)
+        supervised_flow = hparams.get('supervised_flow', False)
         self.flow_pred = SimpleFlowNet()
         self.occ_pred = SimpleOcclusionNet()
         self.inpainting = InpaintingNet()
         if flow_root:
-            self.flow_pred = FlowStageModel.load_from_checkpoint(flow_root).flow_pred
+            if supervised_flow: 
+                self.flow_pred = FlowModel.load_from_checkpoint(flow_root).model
+            else: 
+                self.flow_pred = FlowStageModel.load_from_checkpoint(flow_root).flow_pred
         if inpainting_root:
             self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
         
