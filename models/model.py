@@ -383,10 +383,62 @@ class InpaintingGConvModel(pl.LightningModule):
         optD.zero_grad()
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("whole loss", whole_loss, global_step = self.global_step)
-            tensorboard.add_scalar("recon loss", r_loss, global_step = self.global_step)
-            tensorboard.add_scalar("gan loss", g_loss, global_step = self.global_step)
-            tensorboard.add_scalar("discriminator loss", d_loss, global_step = self.global_step)
+            tensorboard.add_scalar("train_whole_loss", whole_loss, global_step = self.global_step)
+            tensorboard.add_scalar("train_recon_loss", r_loss, global_step = self.global_step)
+            tensorboard.add_scalar("train_gan_loss", g_loss, global_step = self.global_step)
+            tensorboard.add_scalar("train_discriminator_loss", d_loss, global_step = self.global_step)
+    def validation_step(self, batch, batch_idx): 
+        _, imgs, masks = batch 
+        #train discriminator
+        coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+        pos_imgs = torch.cat([imgs, masks], dim=1)
+        neg_imgs = torch.cat([complete_imgs, masks], dim=1)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+        pred_pos_neg = self.discriminator(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        
+        GANLoss = SNGenLoss(0.005)
+        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        g_loss = GANLoss(pred_neg)
+        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        whole_loss = g_loss + r_loss
+       
+        Dloss = SNDisLoss()
+        d_loss = Dloss(pred_pos, pred_neg)
+       
+        if batch_idx == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("val_whole_loss", whole_loss, global_step = self.global_step)
+            tensorboard.add_scalar("val_recon_loss", r_loss, global_step = self.global_step)
+            tensorboard.add_scalar("val_gan_loss", g_loss, global_step = self.global_step)
+            tensorboard.add_scalar("val_d_loss", d_loss, global_step = self.global_step)
+    def test_step(self, batch, batch_idx): 
+        _, imgs, masks = batch 
+        #train discriminator
+        coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+        pos_imgs = torch.cat([imgs, masks], dim=1)
+        neg_imgs = torch.cat([complete_imgs, masks], dim=1)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+        pred_pos_neg = self.discriminator(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        
+        GANLoss = SNGenLoss(0.005)
+        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        g_loss = GANLoss(pred_neg)
+        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        whole_loss = g_loss + r_loss
+       
+        Dloss = SNDisLoss()
+        d_loss = Dloss(pred_pos, pred_neg)
+       
+        if batch_idx == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("test_whole_loss", whole_loss, global_step = self.global_step)
+            tensorboard.add_scalar("test_recon_loss", r_loss, global_step = self.global_step)
+            tensorboard.add_scalar("test_gan_loss", g_loss, global_step = self.global_step)
+            tensorboard.add_scalar("test_d_loss", d_loss, global_step = self.global_step)
     def configure_optimizers(self): 
         optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
         optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
