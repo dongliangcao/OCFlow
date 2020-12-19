@@ -16,7 +16,7 @@ from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
 from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
-from models.networks.gated_conv_inpainting_net import InpaintSANet
+from models.networks.gated_conv_inpainting_net import InpaintSANet, InpaintSADiscriminator, SNDisLoss, SNGenLoss, ReconLoss
 
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
@@ -343,6 +343,56 @@ class InpaintingStageModel(pl.LightningModule):
 #             'monitor': 'val_reconst'
 #         }
 
+class InpaintingGConvModel(pl.LightningModule): 
+    def __init__(self, hparams): 
+        super().__init__()
+        self.lr =0.0001
+        self.decay = 0.0
+        self.generator = InpaintSANet()
+        self.discriminator = InpaintSADiscriminator()
+        self.log_every_n_steps = hparams.get('log_every_n_steps',20)
+    def forward(self, inputs): 
+        return self.generator(inputs)
+    def training_step(self, batch, batch_idx): 
+        _, imgs, masks = batch 
+        (optD, optG) = self.optimizers()
+        #train discriminator
+        coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+        pos_imgs = torch.cat([imgs, masks], dim=1)
+        neg_imgs = torch.cat([complete_imgs, masks], dim=1)
+        pos_neg_imgs = torch.cat([pos_imgs, neg_imgs], dim=0)
+        pred_pos_neg = self.discriminator(pos_neg_imgs)
+        pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
+        Dloss = SNDisLoss()
+        d_loss = Dloss(pred_pos, pred_neg)
+        self.manual_backward(d_loss, optD, retain_graph = True)
+        optD.step()
+        optD.zero_grad()
+        optG.zero_grad()
+        #train generator 
+        pred_neg = self.discriminator(neg_imgs)
+        GANLoss = SNGenLoss(0.005)
+        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        g_loss = GANLoss(pred_neg)
+        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        whole_loss = g_loss + r_loss
+        self.manual_backward(whole_loss, optG)
+        optG.step()
+        optG.zero_grad()
+        optD.zero_grad()
+        if self.global_step % self.log_every_n_steps == 0: 
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalar("whole loss", whole_loss, global_step = self.global_step)
+            tensorboard.add_scalar("recon loss", r_loss, global_step = self.global_step)
+            tensorboard.add_scalar("gan loss", g_loss, global_step = self.global_step)
+            tensorboard.add_scalar("discriminator loss", d_loss, global_step = self.global_step)
+    def configure_optimizers(self): 
+        optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
+        optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
+        return [optD, optG]
+
+
 class TwoStageModel(pl.LightningModule):
     """
     Training with two stages:
@@ -518,7 +568,8 @@ class TwoStageModel(pl.LightningModule):
 
     def configure_optimizers(self):
         return Adam(self.parameters(), self.lr)
-        
+
+
 class TwoStageModelGC(pl.LightningModule):
     """
     Training with two stages with ground truth optical flow:

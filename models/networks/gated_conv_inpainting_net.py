@@ -283,11 +283,11 @@ class InpaintSANet(torch.nn.Module):
         x = self.refine_attn(x)
         x = self.refine_upsample_net(x)
 #         x = torch.clamp(x, -1., 1.)
-        return x
+        return coarse_x, x
     
-class InpaintSADirciminator(nn.Module):
+class InpaintSADiscriminator(nn.Module):
     def __init__(self, n_in_channel=4, img_size=(64, 128)):
-        super(InpaintSADirciminator, self).__init__()
+        super(InpaintSADiscriminator, self).__init__()
         cnum = 32
         h, w = img_size[0], img_size[1]
         self.discriminator_net = nn.Sequential(
