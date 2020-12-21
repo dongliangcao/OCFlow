@@ -335,19 +335,22 @@ class ReconLoss(nn.Module):
     Reconstruction loss contain l1 loss, may contain perceptual loss
 
     """
-    def __init__(self, chole_alpha, cunhole_alpha, rhole_alpha, runhole_alpha):
+    def __init__(self, chole_alpha=1, cunhole_alpha=1, rhole_alpha=1, runhole_alpha=1):
         super(ReconLoss, self).__init__()
         self.chole_alpha = chole_alpha
         self.cunhole_alpha = cunhole_alpha
         self.rhole_alpha = rhole_alpha
         self.runhole_alpha = runhole_alpha
 
-    def forward(self, imgs, coarse_imgs, recon_imgs, masks):
+    def forward(self, imgs, recon_imgs, masks, coarse_imgs = None):
         masks_viewed = masks.view(masks.size(0), -1)
         rhole =torch.mean(torch.abs(imgs - recon_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))
         runhole = torch.mean(torch.abs(imgs - recon_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))
-        chole = torch.mean(torch.abs(imgs - coarse_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))
-        cunhole = torch.mean(torch.abs(imgs - coarse_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))
-        total_loss  = self.rhole_alpha*rhole + self.runhole_alpha*runhole + self.chole_alpha*chole + self.cunhole_alpha*cunhole
+        if coarse_imgs!=None: 
+            chole = torch.mean(torch.abs(imgs - coarse_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))
+            cunhole = torch.mean(torch.abs(imgs - coarse_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))
+            total_loss  = self.rhole_alpha*rhole + self.runhole_alpha*runhole + self.chole_alpha*chole + self.cunhole_alpha*cunhole
+        else: 
+            total_loss  = self.rhole_alpha*rhole + self.runhole_alpha*runhole
         return total_loss, rhole, runhole 
                 

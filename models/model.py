@@ -284,54 +284,64 @@ class InpaintingStageModel(pl.LightningModule):
         imgs, complete_imgs, occlusion_map = batch
         # inpainting
         pred_imgs = self.model(complete_imgs, occlusion_map)
-        reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
+        #reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
-        return reconst_error, second_order_error
+        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        recon_loss, rhole, runhole = Recon_Loss(complete_imgs, pred_imgs, occlusion_map)
+        return recon_loss,rhole, runhole, second_order_error
     
     
     def training_step(self, batch, batch_idx):
-        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'train')
-        loss = reconst_error + self.second_order_weight * second_order_error
+        recon_loss,rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'train')
+        #loss = reconst_error + self.second_order_weight * second_order_error
 
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
-            tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
-        return loss
+            tensorboard.add_scalars("second_order",{"train_loss": second_order_error}, global_step = self.global_step)
+        return recon_loss,rhole, runhole
     def training_epoch_end(self, outputs): 
-        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        avg_occluded = torch.stack([x['loss'][0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x['loss'][1] for x in outputs]).mean()
+        avg_recon = torch.stack([x['loss'][2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
-    
+        tensorboard.add_scalars("occluded_losses", {"train_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"train_loss": avg_recon}, global_step = self.current_epoch)
     
     def validation_step(self, batch, batch_idx):
-        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'val')
-        loss = reconst_error + self.second_order_weight * second_order_error
+        recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'val')
+        #loss = reconst_error + self.second_order_weight * second_order_error
         
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
-            tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
-        return loss
+            tensorboard.add_scalars("second_order", {"val_loss": second_order_error}, global_step = self.global_step)
+        return recon_loss, rhole, runhole
     def validation_epoch_end(self,outputs): 
-        avg_loss = torch.stack([x for x in outputs]).mean()
+        avg_occluded = torch.stack([x[0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        avg_recon = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"val_loss": avg_loss}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
+        tensorboard.add_scalars("occluded_losses", {"val_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"val_loss": avg_recon}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx):
-        reconst_error, second_order_error = self.general_step(batch, batch_idx, 'test')
-        loss = reconst_error + self.second_order_weight * second_order_error
+        recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'test')
+        #loss = reconst_error + self.second_order_weight * second_order_error
         
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
-            tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
-        return loss
+            tensorboard.add_scalars("second_order", {"test_loss": second_order_error}, global_step = self.global_step)
+        return recon_loss, rhole, runhole
     def test_epoch_end(self, outputs): 
-        avg_loss = torch.stack([x for x in outputs]).mean()
+        avg_occluded = torch.stack([x[0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        avg_recon = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
-        tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
+        tensorboard.add_scalars("occluded_losses", {"test_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"test_loss": avg_recon}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), self.lr)
@@ -375,7 +385,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
         self.manual_backward(whole_loss, optG)
         optG.step()
@@ -387,13 +397,15 @@ class InpaintingGConvModel(pl.LightningModule):
             tensorboard.add_scalars("recon_loss", {"train_loss": r_loss}, global_step = self.global_step)
             tensorboard.add_scalars("gan_loss", {"train_loss":g_loss}, global_step = self.global_step)
             tensorboard.add_scalars("discriminator_loss",{ "train_loss":d_loss}, global_step = self.global_step)
-        return r_occluded, r_non_occluded
+        return r_loss, r_occluded, r_non_occluded
     def training_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x['loss'][0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x['loss'][1] for x in outputs]).mean()
+        avg_recon = torch.stack([x['loss'][2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_losses", {"train_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_losses", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"train_loss": avg_recon}, global_step = self.current_epoch)
 
     def validation_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
@@ -409,7 +421,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
        
         Dloss = SNDisLoss()
@@ -421,13 +433,17 @@ class InpaintingGConvModel(pl.LightningModule):
             tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
             tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
             tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
-        return r_occluded, r_non_occluded
+        return r_loss, r_occluded, r_non_occluded
     def validation_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        avg_recon = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_losses", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_losses", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"val_loss": avg_recon}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
+
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
         #train discriminator
@@ -442,7 +458,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded  = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded  = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
        
         Dloss = SNDisLoss()
@@ -454,13 +470,15 @@ class InpaintingGConvModel(pl.LightningModule):
             tensorboard.add_scalars("recon_loss", {"test_loss": r_loss}, global_step = self.global_step)
             tensorboard.add_scalars("gan_loss", {"test_loss":g_loss}, global_step = self.global_step)
             tensorboard.add_scalars("discriminator_loss",{ "test_loss":d_loss}, global_step = self.global_step)
-        return r_occluded, r_non_occluded
+        return r_loss, r_occluded, r_non_occluded
     def test_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        avg_recon = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_losses", {"test_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_losses", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("recon_losses", {"test_loss": avg_recon}, global_step = self.current_epoch)
     def configure_optimizers(self): 
         optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
         optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
