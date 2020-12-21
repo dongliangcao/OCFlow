@@ -375,7 +375,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
         whole_loss = g_loss + r_loss
         self.manual_backward(whole_loss, optG)
         optG.step()
@@ -383,10 +383,18 @@ class InpaintingGConvModel(pl.LightningModule):
         optD.zero_grad()
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("train_whole_loss", whole_loss, global_step = self.global_step)
-            tensorboard.add_scalar("train_recon_loss", r_loss, global_step = self.global_step)
-            tensorboard.add_scalar("train_gan_loss", g_loss, global_step = self.global_step)
-            tensorboard.add_scalar("train_discriminator_loss", d_loss, global_step = self.global_step)
+            tensorboard.add_scalars("whole_loss",{"train_loss": whole_loss} , global_step = self.global_step)
+            tensorboard.add_scalars("recon_loss", {"train_loss": r_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("gan_loss", {"train_loss":g_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("discriminator_loss",{ "train_loss":d_loss}, global_step = self.global_step)
+        return r_occluded, r_non_occluded
+    def training_epoch_end(self, outputs): 
+        avg_occluded = torch.stack([x['loss'][0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x['loss'][1] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("occluded_losses", {"train_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
+
     def validation_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
         #train discriminator
@@ -401,7 +409,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
         whole_loss = g_loss + r_loss
        
         Dloss = SNDisLoss()
@@ -409,10 +417,17 @@ class InpaintingGConvModel(pl.LightningModule):
        
         if batch_idx == 0:
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("val_whole_loss", whole_loss, global_step = self.global_step)
-            tensorboard.add_scalar("val_recon_loss", r_loss, global_step = self.global_step)
-            tensorboard.add_scalar("val_gan_loss", g_loss, global_step = self.global_step)
-            tensorboard.add_scalar("val_d_loss", d_loss, global_step = self.global_step)
+            tensorboard.add_scalars("whole_loss",{"val_loss": whole_loss} , global_step = self.global_step)
+            tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
+        return r_occluded, r_non_occluded
+    def validation_epoch_end(self, outputs): 
+        avg_occluded = torch.stack([x[0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("occluded_losses", {"val_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
         #train discriminator
@@ -427,7 +442,7 @@ class InpaintingGConvModel(pl.LightningModule):
         GANLoss = SNGenLoss(0.005)
         Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
         g_loss = GANLoss(pred_neg)
-        r_loss = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
+        r_loss, r_occluded, r_non_occluded  = Recon_Loss(imgs, coarse_imgs, recon_imgs, masks)
         whole_loss = g_loss + r_loss
        
         Dloss = SNDisLoss()
@@ -435,10 +450,17 @@ class InpaintingGConvModel(pl.LightningModule):
        
         if batch_idx == 0:
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("test_whole_loss", whole_loss, global_step = self.global_step)
-            tensorboard.add_scalar("test_recon_loss", r_loss, global_step = self.global_step)
-            tensorboard.add_scalar("test_gan_loss", g_loss, global_step = self.global_step)
-            tensorboard.add_scalar("test_d_loss", d_loss, global_step = self.global_step)
+            tensorboard.add_scalars("whole_loss",{"test_loss": whole_loss} , global_step = self.global_step)
+            tensorboard.add_scalars("recon_loss", {"test_loss": r_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("gan_loss", {"test_loss":g_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("discriminator_loss",{ "test_loss":d_loss}, global_step = self.global_step)
+        return r_occluded, r_non_occluded
+    def test_epoch_end(self, outputs): 
+        avg_occluded = torch.stack([x[0] for x in outputs]).mean()
+        avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
+        tensorboard = self.logger.experiment
+        tensorboard.add_scalars("occluded_losses", {"test_loss": avg_occluded}, global_step = self.current_epoch)
+        tensorboard.add_scalars("non_occluded_losses", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
     def configure_optimizers(self): 
         optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
         optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
