@@ -73,7 +73,7 @@ if __name__ == '__main__':
     #specify data module
     dataset_name = args.dataset_name
     image_size = (64,128)
-    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting']
+    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting']
     data_module = DatasetModule(root=args.root,image_size= image_size, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
     data_module.setup()

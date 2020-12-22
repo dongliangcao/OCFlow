@@ -511,7 +511,70 @@ class FlyingChairs(Dataset):
 
     def __len__(self):
         return self.size * self.replicates 
+class FlyingChairsInpainting(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size=None, occlusion_ratio=0.5, static_occ=False):
+        self.transform = transform
+        self.replicates = replicates
+        self.image_size =image_size
+        self.occlusion_ratio = occlusion_ratio
+        self.static_occ = static_occ        
+        
+        images = sorted( glob( join(root, '*.ppm') ) )
+
+        self.image_list = []
+        for i in range(len(images)//2):
+            im1 = images[2*i]
+            im2 = images[2*i + 1]
+            self.image_list += [ [ im1, im2 ] ]
+
+        self.size = len(self.image_list)
+        print(self.size)
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+
+            img = frame_utils.read_gen(self.image_list[index][0])
+
+            
+            h, w = img.shape[:2]
+            cropper = StaticCenterCrop((h, w), self.render_size)
+            img = cropper(img)
+            
+            complete_img = img.copy()
+            
+            
+            if self.transform:
+                img = self.transform(img)
+                complete_img = self.transform(complete_img)
+            
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img = resize(img)
+                complete_img = resize(complete_img)
+            
+            if self.static_occ:
+                h, w = img.shape[1], img.shape[2]
+                th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
+                occ = StaticRandomOcclusion((h, w), (th, tw))
+            else:
+                h, w = img.shape[1], img.shape[2]
+                max_brush_width = int(0.05 * h)
+                max_len = int(0.5 * h)
+                occ = FreeFormRandomOcclusion(max_brush_width=max_brush_width, max_len=max_len)
+            img, occlusion_map = occ(img)
+            
+            return img, complete_img, occlusion_map
     
+    def __len__(self):
+        return self.size * self.replicates
+
 class ImagesFromFolder(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', iext='png', replicates=1, stack_imgs=True, image_size = None):
         self.transform = transform

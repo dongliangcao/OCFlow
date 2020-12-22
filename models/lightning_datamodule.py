@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from torchvision import transforms
-from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc, MpiSintelCleanInpainting, MpiSintelFinalInpainting
+from models.data.datasets import ImgFlowOccFromFolder, MpiSintelClean, MpiSintelFinal, MpiSintelCleanOcc, MpiSintelFinalOcc, MpiSintelCleanFlowOcc, MpiSintelFinalFlowOcc, MpiSintelCleanInpainting, MpiSintelFinalInpainting, FlyingChairsInpainting
 from torch.utils.data import DataLoader
 from math import ceil
 import torch
@@ -39,6 +39,8 @@ class DatasetModule(pl.LightningDataModule):
             dataset = MpiSintelCleanInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=self.occlusion_ratio, static_occ=self.static_occ)
         elif self.dataset_name == 'MpiSintelFinalInpainting':
             dataset = MpiSintelFinalInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=self.occlusion_ratio, static_occ=self.static_occ)
+        elif self.dataset_name == 'FlyingChairsInpainting':
+            dataset = FlyingChairsInpainting(root=self.root, transform=transform, image_size=self.image_size, occlusion_ratio=self.occlusion_ratio, static_occ=self.static_occ)
         else:
             raise ValueError('Unsupported dataset type: {}'.format(self.dataset_name))
         if not self.overfit:
