@@ -289,11 +289,11 @@ class InpaintSADiscriminator(nn.Module):
         cnum = 32
         h, w = img_size[0], img_size[1]
         self.discriminator_net = nn.Sequential(
-            SNConvWithActivation(n_in_channel, 2*cnum, 4, 2, padding=get_pad(img_size, 5, 2)),
-            SNConvWithActivation(2*cnum, 4*cnum, 4, 2, padding=get_pad((h//2, w//2), 5, 2)),
-            SNConvWithActivation(4*cnum, 8*cnum, 4, 2, padding=get_pad((h//4, w//4), 5, 2)),
-            SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad((h//8, w//8), 5, 2)),
-            SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad((h//16, w//16), 5, 2)),
+            SNConvWithActivation(n_in_channel, 2*cnum, 5, 2, padding=get_pad(img_size, 5, 2)),
+            SNConvWithActivation(2*cnum, 4*cnum, 5, 2, padding=get_pad((h//2, w//2), 5, 2)),
+            SNConvWithActivation(4*cnum, 8*cnum, 5, 2, padding=get_pad((h//4, w//4), 5, 2)),
+            SNConvWithActivation(8*cnum, 8*cnum, 5, 2, padding=get_pad((h//8, w//8), 5, 2)),
+            SNConvWithActivation(8*cnum, 8*cnum, 5, 2, padding=get_pad((h//16, w//16), 5, 2)),
 #             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad((h//32, w//32), 5, 2)),
 #             Self_Attn(8*cnum, 'relu'),
 #             SNConvWithActivation(8*cnum, 8*cnum, 4, 2, padding=get_pad(4, 5, 2)),

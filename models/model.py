@@ -381,8 +381,8 @@ class InpaintingGConvModel(pl.LightningModule):
         optG.zero_grad()
         #train generator 
         pred_neg = self.discriminator(neg_imgs)
-        GANLoss = SNGenLoss(0.005)
-        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        GANLoss = SNGenLoss(1.0)
+        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
         r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
@@ -417,8 +417,8 @@ class InpaintingGConvModel(pl.LightningModule):
         pred_pos_neg = self.discriminator(pos_neg_imgs)
         pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
         
-        GANLoss = SNGenLoss(0.005)
-        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        GANLoss = SNGenLoss(1.0)
+        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
         r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
@@ -454,8 +454,8 @@ class InpaintingGConvModel(pl.LightningModule):
         pred_pos_neg = self.discriminator(pos_neg_imgs)
         pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
         
-        GANLoss = SNGenLoss(0.005)
-        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        GANLoss = SNGenLoss(1.0)
+        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
         r_loss, r_occluded, r_non_occluded  = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
         whole_loss = g_loss + r_loss
