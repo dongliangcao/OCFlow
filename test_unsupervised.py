@@ -19,26 +19,27 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, help='Epochs to train', default=100)
     parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3) 
     parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0)
-    parser.add_argument('--find_best_lr', action = 'store_true', help='Use Trainer to find the best learning')
+    parser.add_argument('--find_best_lr', action='store_true', help='Use Trainer to find the best learning')
     parser.add_argument('--log_every_n_steps', type=int, help='Log every n steps', default = 20)
-
+    parser.add_argument('--image_size', type=int, nargs=2, help='Image size', default=[64, 128])
     #parameters for each model
     parser.add_argument('--smoothness_weight', type=float, help='Weight for smoothness loss', default=0.05)
     parser.add_argument('--second_order_weight', type=float, help='Weight for gradient of image', default=0.0)
     parser.add_argument('--reconst_weight', type=float, help='Weight for reconstruction loss', default=2.0)
-    parser.add_argument('--with_occ', action = 'store_true', help='Training flownet with ground truth occlusion mask or not')
+    parser.add_argument('--with_occ', action='store_true', help='Training flownet with ground truth occlusion mask or not')
     parser.add_argument('--flow_root', type=str, help='Path to flow model checkpoint', default=None)
-    parser.add_argument('--supervised_flow', action = 'store_true', help='Used trained supervised model in TwoStageModel instead of unsupervised one')
+    parser.add_argument('--supervised_flow', action='store_true', help='Used trained supervised model in TwoStageModel instead of unsupervised one')
     parser.add_argument('--inpainting_root', type=str, help='Path to inpainting model checkpoint', default=None)
     
 
 
     args = parser.parse_args()
     
-    hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate, log_every_n_steps = args.log_every_n_steps)
+    hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate, log_every_n_steps = args.log_every_n_steps, img_size=args.image_size)
 
     network_type = args.network_type
     automatic_optimization = True
+    image_size = args.image_size
     assert network_type in ['flow', 'inpainting', 'twostage'], 'Unknown network type'
     if network_type == 'flow':
         assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']
@@ -72,7 +73,7 @@ if __name__ == '__main__':
     max_epochs = args.epochs
     #specify data module
     dataset_name = args.dataset_name
-    image_size = (64,128)
+    
     assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting']
     data_module = DatasetModule(root=args.root,image_size= image_size, batch_size=args.batch_size, dataset_name=dataset_name)
     data_module.prepare_data()
@@ -92,12 +93,12 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args.find_best_lr: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger, callbacks =[checkpoint_callback], automatic_optimization = automatic_optimization)
-        trainer.fit(model, datamodule = data_module)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer.fit(model, datamodule=data_module)
     else: 
-        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger, callbacks =[checkpoint_callback], automatic_optimization = automatic_optimization)
-        lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None, num_training=100)
+        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
+        lr_finder = trainer.tuner.lr_find(model, datamodule=data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
         model.lr = suggested_lr
-        trainer.fit(model, datamodule = data_module)
+        trainer.fit(model, datamodule=data_module)

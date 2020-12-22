@@ -16,7 +16,7 @@ from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
 from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
-from models.networks.gated_conv_inpainting_net import InpaintSANet, InpaintSADiscriminator, SNDisLoss, SNGenLoss, ReconLoss
+from models.networks.gated_conv_inpainting_net import InpaintSANet, InpaintSANetOrg, InpaintSADiscriminator, InpaintSADiscriminatorOrg, SNDisLoss, SNGenLoss, ReconLoss
 
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
@@ -356,8 +356,14 @@ class InpaintingGConvModel(pl.LightningModule):
         self.hparams = hparams
         self.lr = hparams.get('learning_rate',1e-4)
         self.decay = hparams.get('decay',0.0)
-        self.generator = InpaintSANet()
-        self.discriminator = InpaintSADiscriminator()
+        self.org = hparams.get('org', False)
+        self.img_size = hparams.get('image_size', (64, 128))
+        if self.org:
+            self.generator = InpaintSANetOrg(img_size=self.img_size)
+            self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
+        else:
+            self.generator = InpaintSANet(img_size=self.img_size)
+            self.discriminator = InpaintSADiscriminator(img_size=self.img_size)
         self.log_every_n_steps = hparams.get('log_every_n_steps',20)
         
     def forward(self, inputs): 
