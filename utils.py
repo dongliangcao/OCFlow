@@ -114,6 +114,7 @@ def visualize_occ(imgs, occ, pred_occ):
     plt.imshow(pred_occ, cmap='gray')
     plt.axis('off')
     plt.title('predicted occlusion')
+    plt.show()
 
     
 def visualize_flow_and_warp(imgs, img_pred_warped, img_warped, predicted_flow, flow):    
@@ -158,7 +159,6 @@ def visualize_flow_and_warp(imgs, img_pred_warped, img_warped, predicted_flow, f
     plt.axis('off')
     plt.title('optical flow')
     plt.show()
-    print()
     
 def visualize_flow(imgs, predicted_flow, flow):    
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
