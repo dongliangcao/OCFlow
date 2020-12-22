@@ -519,29 +519,21 @@ class FlyingChairsInpainting(Dataset):
         self.occlusion_ratio = occlusion_ratio
         self.static_occ = static_occ        
         
-        images = sorted( glob( join(root, '*.ppm') ) )
-
-        self.image_list = []
-        for i in range(len(images)//2):
-            im1 = images[2*i]
-            im2 = images[2*i + 1]
-            self.image_list += [ [ im1, im2 ] ]
-
+        self.image_list = sorted( glob( join(root, '*.ppm') ) )
         self.size = len(self.image_list)
-        print(self.size)
-        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        self.render_size = list(frame_utils.read_gen(self.image_list[0]).shape[:2])
         
         if (self.render_size[0] % 64) or (self.render_size[1] % 64):
             self.render_size[0] = ((self.render_size[0]) // 64) * 64
             self.render_size[1] = ((self.render_size[1]) // 64) * 64
+            
     def __getitem__(self, index):
         if isinstance(index, slice):
             return [self[ii] for ii in range(*index.indices(len(self)))]
         else:
             index = index % self.size
 
-            img = frame_utils.read_gen(self.image_list[index][0])
-
+            img = frame_utils.read_gen(self.image_list[index])
             
             h, w = img.shape[:2]
             cropper = StaticCenterCrop((h, w), self.render_size)

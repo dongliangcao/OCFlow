@@ -114,9 +114,9 @@ def visualize_occ(imgs, occ, pred_occ):
     plt.imshow(pred_occ, cmap='gray')
     plt.axis('off')
     plt.title('predicted occlusion')
-    plt.show()
+
     
-def visualize_flow(imgs, img_pred_warped, img_warped, predicted_flow, flow):    
+def visualize_flow_and_warp(imgs, img_pred_warped, img_warped, predicted_flow, flow):    
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
     img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
     img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
@@ -158,6 +158,39 @@ def visualize_flow(imgs, img_pred_warped, img_warped, predicted_flow, flow):
     plt.axis('off')
     plt.title('optical flow')
     plt.show()
+    print()
+    
+def visualize_flow(imgs, predicted_flow, flow):    
+    img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
+    img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
+    img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
+    predicted_flow = predicted_flow.detach().cpu().numpy().transpose(1, 2, 0)
+    flow = flow.detach().cpu().numpy().transpose(1, 2, 0)
+    pred_flow_viz = flow2img(predicted_flow)
+    flow_viz = flow2img(flow)
+
+    plt.figure(figsize=(12, 6))
+    plt.subplot(2, 2, 1)
+    plt.imshow(img1/2.0 + 0.5)
+    plt.axis('off')
+    plt.title('image 1')
+
+    plt.subplot(2, 2, 2)
+    plt.imshow(img2/2.0 + 0.5)
+    plt.axis('off')
+    plt.title('image 2')
+    
+    plt.subplot(2, 2, 3)
+    plt.imshow(pred_flow_viz)
+    plt.axis('off')
+    plt.title('predicted optical flow')
+    
+    plt.subplot(2, 2, 4)
+    plt.imshow(flow_viz)
+    plt.axis('off')
+    plt.title('optical flow')
+    plt.show()
+    print('average epe', evaluate_flow(flow, predicted_flow))
     
 def visualize(imgs, img_pred_warped, img_warped, img_occluded, img_completed, pred_flow, flow, pred_occ, occ):    
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]

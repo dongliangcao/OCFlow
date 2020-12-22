@@ -205,14 +205,14 @@ def flow_error(tu, tv, u, v, occ=None):
     su[idxUnknow] = 0
     sv[idxUnknow] = 0
 
-    ind2 = ((np.absolute(stu) > smallflow) | (np.absolute(stv) > smallflow))
-    index_su = su[ind2]
-    index_sv = sv[ind2]
-    an = 1.0 / np.sqrt(index_su**2 + index_sv**2 + 1)
+#     ind2 = ((np.absolute(stu) > smallflow) | (np.absolute(stv) > smallflow))
+#     index_su = su[ind2]
+#     index_sv = sv[ind2]
+#     an = 1.0 / np.sqrt(index_su**2 + index_sv**2 + 1)
 
-    index_stu = stu[ind2]
-    index_stv = stv[ind2]
-    tn = 1.0 / np.sqrt(index_stu**2 + index_stv**2 + 1)
+#     index_stu = stu[ind2]
+#     index_stv = stv[ind2]
+#     tn = 1.0 / np.sqrt(index_stu**2 + index_stv**2 + 1)
     '''
     angle = un * tun + vn * tvn + (an * tn)
     index = [angle == 1.0]
@@ -223,7 +223,7 @@ def flow_error(tu, tv, u, v, occ=None):
     '''
 
     epe = np.sqrt((stu - su)**2 + (stv - sv)**2)
-    epe = epe[ind2]
+#     epe = epe[ind2]
     if occ is not None:
         occ = (1 - occ).astype(bool)
         socc = occ.reshape(-1)
