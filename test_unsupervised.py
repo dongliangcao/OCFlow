@@ -1,5 +1,5 @@
 import pytorch_lightning as pl
-from models.model import FlowStageModel, InpaintingStageModel, TwoStageModel, TwoStageModelGC
+from models.model import FlowStageModel, InpaintingStageModel, TwoStageModel, TwoStageModelGC, InpaintingGConvModel
 from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning import loggers as pl_loggers
@@ -38,6 +38,7 @@ if __name__ == '__main__':
     hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate, log_every_n_steps = args.log_every_n_steps)
 
     network_type = args.network_type
+    automatic_optimization = True
     assert network_type in ['flow', 'inpainting', 'twostage'], 'Unknown network type'
     if network_type == 'flow':
         assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']
@@ -46,8 +47,13 @@ if __name__ == '__main__':
         hparams['with_occ'] = args.with_occ
         model = FlowStageModel(hparams=hparams)
     elif network_type == 'inpainting':
-        hparams['second_order_weight'] = args.second_order_weight
-        model = InpaintingStageModel(hparams=hparams)
+        assert hparams['model'] in ['simple', 'gated']
+        if hparams['model'] == 'simple': 
+            hparams['second_order_weight'] = args.second_order_weight
+            model = InpaintingStageModel(hparams=hparams)
+        else: 
+            model = InpaintingGConvModel(hparams = hparams)
+            automatic_optimization = False
     else: 
         assert hparams['model'] in ['with_gt_flow', 'no_gt_flow']
         hparams['reconst_weight'] = args.reconst_weight
@@ -86,12 +92,12 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args.find_best_lr: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger, callbacks =[checkpoint_callback])
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args.overfit_batches, logger = tb_logger, callbacks =[checkpoint_callback], automatic_optimization = automatic_optimization)
         trainer.fit(model, datamodule = data_module)
     else: 
-        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger, callbacks =[checkpoint_callback])
+        trainer = pl.Trainer(gpus =1, max_epochs = max_epochs, logger = tb_logger, callbacks =[checkpoint_callback], automatic_optimization = automatic_optimization)
         lr_finder = trainer.tuner.lr_find(model, datamodule = data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
-        model.hparams['lr'] = suggested_lr
+        model.lr = suggested_lr
         trainer.fit(model, datamodule = data_module)
