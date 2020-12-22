@@ -30,12 +30,12 @@ if __name__ == '__main__':
     parser.add_argument('--flow_root', type=str, help='Path to flow model checkpoint', default=None)
     parser.add_argument('--supervised_flow', action='store_true', help='Used trained supervised model in TwoStageModel instead of unsupervised one')
     parser.add_argument('--inpainting_root', type=str, help='Path to inpainting model checkpoint', default=None)
-    
+    parser.add_argument('--org', action='store_true', help='Use the original version of the gated convolution')
 
 
     args = parser.parse_args()
     
-    hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate, log_every_n_steps = args.log_every_n_steps, img_size=args.image_size)
+    hparams = dict(network_type = args.network_type, model=args.model, epochs = args.epochs, batch_size=args.batch_size, learning_rate=args.learning_rate, log_every_n_steps = args.log_every_n_steps, img_size=args.image_size, org=args.org)
 
     network_type = args.network_type
     automatic_optimization = True
