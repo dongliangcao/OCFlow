@@ -354,7 +354,7 @@ class InpaintingGConvModel(pl.LightningModule):
     def __init__(self, hparams): 
         super().__init__()
         self.hparams = hparams
-        self.lr = hparams.get('learning_rate',1e-3)
+        self.lr = hparams.get('learning_rate',1e-4)
         self.decay = hparams.get('decay',0.0)
         self.generator = InpaintSANet()
         self.discriminator = InpaintSADiscriminator()

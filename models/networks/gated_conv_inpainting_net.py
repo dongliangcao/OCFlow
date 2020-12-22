@@ -64,14 +64,13 @@ class GatedConv2dWithActivation(nn.Module):
     def forward(self, input):
         x = self.conv2d(input)
         mask = self.mask_conv2d(input)
+        if self.batch_norm is not None:
+            x = self.batch_norm(x)
         if self.activation is not None:
             x = self.activation(x) * self.gated(mask)
         else:
             x = x * self.gated(mask)
-        if self.batch_norm is not None:
-            return self.batch_norm(x)
-        else:
-            return x
+        return x
         
 class GatedDeConv2dWithActivation(torch.nn.Module):
     """
@@ -115,14 +114,13 @@ class SNGatedConv2dWithActivation(torch.nn.Module):
     def forward(self, input):
         x = self.conv2d(input)
         mask = self.mask_conv2d(input)
+        if self.batch_norm is not None:
+            x = self.batch_norm(x)
         if self.activation is not None:
             x = self.activation(x) * self.gated(mask)
         else:
             x = x * self.gated(mask)
-        if self.batch_norm is not None:
-            return self.batch_norm(x)
-        else:
-            return x
+        return x
         
 class SNGatedDeConv2dWithActivation(torch.nn.Module):
     """
