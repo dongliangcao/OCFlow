@@ -54,7 +54,7 @@ if __name__ == '__main__':
     dataset_name = args['dataset_name']
     image_size = args['image_size']
     assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc']
-    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name)
+    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, overfit = args['overfit'])
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping callbacks
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args['find_best_lr']: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args['overfit_batches'], logger=tb_logger, callbacks=[checkpoint_callback])
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback])
         trainer.fit(model, datamodule=data_module)
     else: 
         trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback])

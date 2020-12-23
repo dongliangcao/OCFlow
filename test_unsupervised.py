@@ -7,6 +7,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 import argparse
 import yaml
 import torch
+import time
 
 if __name__ == '__main__':
 #     parser = argparse.ArgumentParser()
@@ -35,11 +36,12 @@ if __name__ == '__main__':
 
 
 #     args = parser.parse_args()
-    
-    file_name = r'config\unsupervised_config.yml'
+    file_name = r'config/unsupervised_config.yml'
     with open(file_name) as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
-    
+    time_stamp = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
+    result_dir = '{}/{}'.format(args['result_dir'], time_stamp)
+    print('result directory is {}'.format(result_dir))
     hparams = dict(network_type = args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'], log_every_n_steps = args['log_every_n_steps'], img_size=args['image_size'], org=args['org'])
 
     network_type = args['network_type']
@@ -58,6 +60,9 @@ if __name__ == '__main__':
             hparams['second_order_weight'] = args['second_order_weight']
             model = InpaintingStageModel(hparams=hparams)
         else: 
+            hparams['n_display_images'] = args['n_display_images']
+            hparams['result_dir'] = result_dir
+            hparams['log_image_every_epoch'] = args['log_image_every_epoch']
             model = InpaintingGConvModel(hparams=hparams)
             automatic_optimization = False
     else: 
@@ -80,7 +85,7 @@ if __name__ == '__main__':
     dataset_name = args['dataset_name']
     
     assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting']
-    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, static_occ=args['static_occ'])
+    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, static_occ=args['static_occ'], overfit = args['overfit'])
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping callback
@@ -98,7 +103,7 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args['find_best_lr']: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, overfit_batches=args['overfit_batches'], logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         trainer.fit(model, datamodule=data_module)
     else: 
         trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)

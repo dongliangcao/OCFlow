@@ -1,4 +1,4 @@
-batch_size: 16
+batch_size: 2
 dataset_name: MpiSintelCleanInpainting
 epochs: 1000
 find_best_lr: false
@@ -8,15 +8,18 @@ image_size: !!python/tuple
 - 128
 inpainting_root: null
 learning_rate: 0.001
-log_every_n_steps: 20
+log_every_n_steps: 1
 model: gated
 network_type: inpainting
 org: false
-overfit_batches: 0
+overfit: True
 reconst_weight: 1.0
-root: D:\MPI-Sintel-complete\data
+root: /home/tnguyen/dataset/mpi-onesample/training
+n_display_images: 2
+log_image_every_epoch: 10
 second_order_weight: 0.0
 smoothness_penalty: 0.05
 supervised_flow: true
 with_occ: false
 static_occ: false
+result_dir: gan_img_logs

@@ -17,7 +17,9 @@ from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
 from models.networks.image_inpainting_net import InpaintingNet
 from models.networks.gated_conv_inpainting_net import InpaintSANet, InpaintSANetOrg, InpaintSADiscriminator, InpaintSADiscriminatorOrg, SNDisLoss, SNGenLoss, ReconLoss
-
+from PIL import Image
+import numpy as np
+import os
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
     Args:
@@ -80,6 +82,8 @@ def edge_aware_smoothness_loss(img, flow, alpha=10.0, reduction=True):
     loss = charbonnier_loss(loss_dx, reduction = reduction) + charbonnier_loss(loss_dy, reduction = reduction)
     
     return loss
+def img2photo(imgs):
+    return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
 
 class FlowStageModel(pl.LightningModule):
     """
@@ -358,6 +362,11 @@ class InpaintingGConvModel(pl.LightningModule):
         self.decay = hparams.get('decay',0.0)
         self.org = hparams.get('org', False)
         self.img_size = hparams.get('image_size', (64, 128))
+        self.batch_size = hparams.get('batch_size', 16)
+        self.n_display_images = hparams.get('n_display_images', 1)
+        self.result_dir = hparams.get('result_dir','')
+        self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
+        print('result dir inside inpainting model is {}'.format(self.result_dir))
         if self.org:
             self.generator = InpaintSANetOrg(img_size=self.img_size)
             self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
@@ -438,6 +447,32 @@ class InpaintingGConvModel(pl.LightningModule):
             tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
             tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
             tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
+            if self.current_epoch % self.log_image_every_epoch == 0: 
+
+                val_save_dir = os.path.join(self.result_dir, "val_{}".format(self.current_epoch))
+                val_save_real_dir = os.path.join(val_save_dir, "real")
+                val_save_gen_dir = os.path.join(val_save_dir, "gen")
+                if not os.path.exists(val_save_real_dir):
+                    os.makedirs(val_save_real_dir)
+                    os.makedirs(val_save_gen_dir)
+
+                saved_images =img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=2))
+                h, w = saved_images.shape[1]//5, saved_images.shape[2]
+                j= 0
+                n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
+                for val_img in saved_images:
+                    real_img = val_img[(3*h):(4*h), :,:]
+                    gen_img = val_img[(4*h):,:,:] 
+                    real_img = Image.fromarray(real_img.astype(np.uint8))
+                    gen_img = Image.fromarray(gen_img.astype(np.uint8))
+                    real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
+                    gen_img.save(os.path.join(val_save_gen_dir, "{}.png".format(j)))
+                    j += 1
+                    if j == n_display_images: 
+                        break
+                tensorboard = self.logger.experiment
+                tensorboard.add_images('val/imgs', saved_images.astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
+
         return (r_occluded, r_non_occluded, r_loss)
     def validation_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
