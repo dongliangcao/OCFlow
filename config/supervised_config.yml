@@ -1,0 +1,13 @@
+batch_size: 32
+dataset_name: MpiSintelClean
+epochs: 1000
+find_best_lr: false
+image_size: !!python/tuple
+- 64
+- 128
+learning_rate: 0.001
+log_every_n_steps: 20
+model: simple
+network_type: flow
+overfit_batches: 0
+root: D:\MPI-Sintel-complete\data
