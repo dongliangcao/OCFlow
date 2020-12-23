@@ -134,3 +134,4 @@ tensorboard_logs/
 
 # Jupyter notebook
 *.ipynb
+*.png
