@@ -471,7 +471,7 @@ class InpaintingGConvModel(pl.LightningModule):
                     if j == n_display_images: 
                         break
                 tensorboard = self.logger.experiment
-                tensorboard.add_images('val/imgs', saved_images.astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
+                tensorboard.add_images('val/imgs', saved_images[:n_display_images].astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
 
         return (r_occluded, r_non_occluded, r_loss)
     def validation_epoch_end(self, outputs): 

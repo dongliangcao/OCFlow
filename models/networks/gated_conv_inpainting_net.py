@@ -4,6 +4,7 @@ from torch import nn
 from torch.nn import init 
     
 import numpy as np
+import math
 
 def get_pad(in_,  ksize, stride, dilation=1):
     if isinstance(in_, (list, tuple)):
@@ -575,6 +576,10 @@ class ReconLoss(nn.Module):
         masks_viewed = masks.view(masks.size(0), -1)
         rhole =torch.mean(torch.abs(imgs - recon_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))
         runhole = torch.mean(torch.abs(imgs - recon_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))
+        if math.isnan(rhole):
+            print('rhole is nan!') 
+            print('max of denominator is {}'.format(torch.max(masks_viewed.mean(1).view(-1,1,1,1))))
+            print('min of denominator is {}'.format(torch.min(masks_viewed.mean(1).view(-1,1,1,1))))
         if coarse_imgs!=None: 
             chole = torch.mean(torch.abs(imgs - coarse_imgs) * masks / masks_viewed.mean(1).view(-1,1,1,1))
             cunhole = torch.mean(torch.abs(imgs - coarse_imgs) * (1. - masks) / (1. - masks_viewed.mean(1).view(-1,1,1,1)))
