@@ -88,7 +88,7 @@ if __name__ == '__main__':
     dataset_name = args['dataset_name']
     
     assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting']
-    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, static_occ=args['static_occ'], overfit = args['overfit'])
+    data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, static_occ=args['static_occ'], overfit=args['overfit'], occlusion_ratio=args['occlusion_ratio'])
     data_module.prepare_data()
     data_module.setup()
     #specify early stopping callback
