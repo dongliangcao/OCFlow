@@ -267,12 +267,16 @@ class InpaintingStageModel(pl.LightningModule):
     def __init__(self, hparams):
         super().__init__()
         self.hparams = hparams
-        self.lr = hparams['learning_rate']
+        self.lr = hparams.get('learning_rate',1e-4)
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
         model = hparams.get('model', 'simple')
         self.model = InpaintingNet()
         self.log_every_n_steps = hparams.get('log_every_n_steps', 20)
-    
+        self.batch_size = hparams.get('batch_size', 16)
+        self.n_display_images = hparams.get('n_display_images', 1)
+        self.result_dir = hparams.get('result_dir','')
+        self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
+        print('result dir inside inpainting model is {}'.format(self.result_dir))
     @property
     def is_cuda(self):
         return next(self.parameters()).is_cuda
@@ -310,12 +314,44 @@ class InpaintingStageModel(pl.LightningModule):
         tensorboard.add_scalars("recon_epoch_loss", {"train_loss": avg_recon}, global_step = self.current_epoch)
     
     def validation_step(self, batch, batch_idx):
-        recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'val')
-        #loss = reconst_error + self.second_order_weight * second_order_error
+        _, imgs, masks = batch
+        recon_imgs = self.model(imgs, masks)
+        second_order_error = (second_order_photometric_error(recon_imgs,imgs, reduction=False) * masks).sum() / (3*masks.sum() + 1e-16)
+        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
+        recon_loss, rhole, runhole = Recon_Loss(imgs, recon_imgs, masks)
+        complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+        #return recon_loss,rhole, runhole, second_order_error
         
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalars("second_order", {"val_loss": second_order_error}, global_step = self.global_step)
+
+            if self.current_epoch % self.log_image_every_epoch == 0: 
+
+                val_save_dir = os.path.join(self.result_dir, "val_{}".format(self.current_epoch))
+                val_save_real_dir = os.path.join(val_save_dir, "real")
+                val_save_gen_dir = os.path.join(val_save_dir, "gen")
+                if not os.path.exists(val_save_real_dir):
+                    os.makedirs(val_save_real_dir)
+                    os.makedirs(val_save_gen_dir)
+
+                saved_images =img2photo(torch.cat([ imgs * (1 - masks),recon_imgs, imgs, complete_imgs], dim=2))
+                h, w = saved_images.shape[1]//4, saved_images.shape[2]
+                j= 0
+                n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
+                for val_img in saved_images:
+                    real_img = val_img[(2*h):(3*h), :,:]
+                    gen_img = val_img[(3*h):,:,:] 
+                    real_img = Image.fromarray(real_img.astype(np.uint8))
+                    gen_img = Image.fromarray(gen_img.astype(np.uint8))
+                    real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
+                    gen_img.save(os.path.join(val_save_gen_dir, "{}.png".format(j)))
+                    j += 1
+                    if j == n_display_images: 
+                        break
+                tensorboard = self.logger.experiment
+                tensorboard.add_images('val/imgs', saved_images[:n_display_images].astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
+                
         return  (rhole, runhole, recon_loss)
     def validation_epoch_end(self,outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()

@@ -58,6 +58,9 @@ if __name__ == '__main__':
         assert hparams['model'] in ['simple', 'gated']
         if hparams['model'] == 'simple': 
             hparams['second_order_weight'] = args['second_order_weight']
+            hparams['n_display_images'] = args['n_display_images']
+            hparams['result_dir'] = result_dir
+            hparams['log_image_every_epoch'] = args['log_image_every_epoch']
             model = InpaintingStageModel(hparams=hparams)
         else: 
             hparams['n_display_images'] = args['n_display_images']

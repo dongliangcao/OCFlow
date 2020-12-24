@@ -560,11 +560,11 @@ class FlyingChairsInpainting(Dataset):
                 h, w = img.shape[1], img.shape[2]
                 th, tw = int(self.occlusion_ratio * h), int(self.occlusion_ratio * w)
                 occ = StaticRandomOcclusion((h, w), (th, tw))
-            else:
+            else: 
                 h, w = img.shape[1], img.shape[2]
-                max_brush_width = int(0.05 * h)
-                max_len = int(0.5 * h)
-                occ = FreeFormRandomOcclusion(max_brush_width=max_brush_width, max_len=max_len)
+                max_brush_width = int(0.02 * h)
+                max_len = int(0.3 * h)
+                occ = FreeFormRandomOcclusion(occlusion_ratio=self.occlusion_ratio, max_brush_width=max_brush_width, max_len=max_len)
             img, occlusion_map = occ(img)
             
             return img, complete_img, occlusion_map
