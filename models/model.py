@@ -287,7 +287,7 @@ class InpaintingStageModel(pl.LightningModule):
         pred_imgs = self.model(complete_imgs, occlusion_map)
         #reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
-        Recon_Loss = ReconLoss(1.2,1.2,1.2,1.2)
+        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         recon_loss, rhole, runhole = Recon_Loss(complete_imgs, pred_imgs, occlusion_map)
         return recon_loss,rhole, runhole, second_order_error
     

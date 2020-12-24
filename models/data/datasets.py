@@ -67,20 +67,21 @@ class StaticRandomOcclusion:
         return img, occlusion_map
     
 class FreeFormRandomOcclusion:
-    def __init__(self, max_vertices=4, max_brush_width=3, max_len=30, max_angle=2*np.pi):
-        self.max_v = max_vertices
+    def __init__(self, occlusion_ratio=0.2, max_brush_width=3, max_len=30, max_angle=np.pi):
+        self.occlusion_ratio = occlusion_ratio
         self.mbw = max_brush_width
         self.mlen = max_len
         self.mangle = max_angle
         
     def __call__(self, img):
         occlusion_map = np.zeros(shape=(img.shape[1], img.shape[2]))
-        num_v = 6 + np.random.randint(self.max_v)
-
-        for i in range(num_v):
-            start_x = np.random.randint(img.shape[2])
-            start_y = np.random.randint(img.shape[1])
-            for j in range(1 + np.random.randint(5)):
+#         num_v = 6 + np.random.randint(self.max_v)
+        i = 0
+        h, w = img.shape[1], img.shape[2]
+        while True:
+            start_x = int((np.random.randn() + 1) * h / 2)
+            start_y = int((np.random.randn() + 1) * w / 2)
+            for j in range(1 + np.random.randint(4)):
                 angle = np.random.randint(self.mangle)
                 if i % 2 == 0:
                     angle = 2 * np.pi - angle
@@ -91,7 +92,11 @@ class FreeFormRandomOcclusion:
 
                 cv2.line(occlusion_map, (start_y, start_x), (end_y, end_x), 1.0, brush_w)
                 start_x, start_y = end_x, end_y
-                
+                i = i + 1
+            # check if the occlusion ratio is satisfied
+            occ_ratio = occlusion_map.sum() /  occlusion_map.size
+            if occ_ratio >= 0.9 * self.occlusion_ratio:
+                break
         occlusion_map = occlusion_map.reshape((1,)+occlusion_map.shape).astype(np.float32)
         occlusion_map = torch.from_numpy(occlusion_map)
         img = torch.where(occlusion_map == 0.0, img, torch.zeros_like(img))
@@ -428,9 +433,9 @@ class MpiSintelInpainting(Dataset):
                 occ = StaticRandomOcclusion((h, w), (th, tw))
             else:
                 h, w = img.shape[1], img.shape[2]
-                max_brush_width = int(0.05 * h)
-                max_len = int(0.5 * h)
-                occ = FreeFormRandomOcclusion(max_brush_width=max_brush_width, max_len=max_len)
+                max_brush_width = int(0.02 * h)
+                max_len = int(0.3 * h)
+                occ = FreeFormRandomOcclusion(occlusion_ratio=self.occlusion_ratio, max_brush_width=max_brush_width, max_len=max_len)
             img, occlusion_map = occ(img)
             
             return img, complete_img, occlusion_map
