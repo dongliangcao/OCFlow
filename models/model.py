@@ -490,7 +490,7 @@ class InpaintingStageModel(pl.LightningModule):
         tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("recon_epoch_loss", {"val_loss": avg_recon}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True, sync_dist = True)
 
     def test_step(self, batch, batch_idx):
         recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'test')
@@ -647,7 +647,7 @@ class InpaintingGConvModel(pl.LightningModule):
         tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("recon_epoch_loss", {"val_loss": avg_recon}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True, sync_dist = True)
 
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 

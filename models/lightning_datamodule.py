@@ -15,7 +15,7 @@ class DatasetModule(pl.LightningDataModule):
         self.overfit = overfit
         self.occlusion_ratio = occlusion_ratio
         self.static_occ = static_occ
-    def prepare_data(self):
+    def setup(self):
         self.datasets = dict()
         transform = transforms.Compose([
             transforms.ToTensor(),
