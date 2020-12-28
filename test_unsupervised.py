@@ -36,6 +36,7 @@ if __name__ == '__main__':
 
 
 #     args = parser.parse_args()
+    pl.seed_everything(42)
     file_name = r'config/unsupervised_config.yml'
     with open(file_name) as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
@@ -106,10 +107,12 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args['find_best_lr']: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        #trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         trainer.fit(model, datamodule=data_module)
     else: 
-        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
+        #trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         lr_finder = trainer.tuner.lr_find(model, datamodule=data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
