@@ -20,6 +20,8 @@ from models.networks.gated_conv_inpainting_net import InpaintSANet, InpaintSANet
 from PIL import Image
 import numpy as np
 import os
+
+from Forward_Warp import forward_warp
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
     Args:
@@ -97,6 +99,7 @@ class FlowStageModel(pl.LightningModule):
         self.second_order_weight = hparams.get('second_order_weight', 0.0)
         self.with_occ = hparams.get('with_occ', False)
         self.log_every_n_steps = hparams.get('log_every_n_steps', 20)
+        self.occ_aware = hparams.get('occ_aware', False)
         
         model = self.hparams.get('model', 'simple')
         if model == 'simple':
@@ -150,6 +153,90 @@ class FlowStageModel(pl.LightningModule):
         
         return output
     
+    def flow_to_warp(self, flow):
+        """
+        Compute the warp from the flow field
+        Args:
+            flow: optical flow shape [B, H, W, 2]
+        Returns:
+            warp: the endpoints of the estimated flow. shape [B, H, W, 2]
+        """
+        B, H, W, _ = flow.size()
+        xx = torch.arange(0, W).view(1,-1).repeat(H,1)
+        yy = torch.arange(0, H).view(-1,1).repeat(1,W)
+        xx = xx.view(1,1,H,W).repeat(B,1,1,1)
+        yy = yy.view(1,1,H,W).repeat(B,1,1,1)
+        grid = torch.cat((xx,yy),1).float()
+        if flow.is_cuda:
+            grid = grid.cuda()
+        grid = grid.permute(0, 2, 3, 1)
+        warp = grid + flow
+        return warp
+    
+    def compute_range_map(self, flow):
+        # permute flow from [B, 2, H, W] to shape [B, H, W, 2]
+        flow = flow.permute(0, 2, 3, 1)
+        batch_size, input_height, input_width, _ = flow.size()
+
+        coords = self.flow_to_warp(flow)
+
+        # split coordinates into an integer part and a float offset for interpolation.
+        coords_floor = torch.floor(coords)
+        coords_offset = coords - coords_floor
+        coords_floor = coords_floor.to(torch.int32)
+
+        # Define a batch offset for flattened indexes into all pixels
+        batch_range = torch.reshape(torch.arange(batch_size), [batch_size, 1, 1])
+        if flow.is_cuda:
+            batch_range = batch_range.cuda()
+        idx_batch_offset = batch_range.repeat(1, input_height, input_width) * input_height * input_width
+
+        # Flatten everything
+        coords_floor_flattened = coords_floor.reshape(-1, 2)
+        coords_offset_flattened = coords_offset.reshape(-1, 2)
+        idx_batch_offset_flattened = idx_batch_offset.reshape(-1)
+
+        # Initialize results
+        idxs_list = []
+        weights_list = []
+
+        # Loop over different di and dj to the four neighboring pixels
+        for di in range(2):
+            for dj in range(2):
+                # Compute the neighboring pixel coordinates
+                idxs_i = coords_floor_flattened[:, 0] + di
+                idxs_j = coords_floor_flattened[:, 1] + dj
+                # Compute the flat index into all pixels
+                idxs = idx_batch_offset_flattened + idxs_j * input_width + idxs_i
+
+                # Only count valid pixels
+                mask = torch.nonzero(torch.logical_and(
+                    torch.logical_and(idxs_i >= 0, idxs_i < input_width),
+                    torch.logical_and(idxs_j >= 0, idxs_j < input_height)
+                ), as_tuple=True)
+                valid_idxs = idxs[mask]
+                valid_offsets = coords_offset_flattened[mask]
+
+                # Compute weights according to bilinear interpolation
+                weights_i = (1. - di) - (-1)**di * valid_offsets[:, 0]
+                weights_j = (1. - dj) - (-1)**dj * valid_offsets[:, 1]
+                weights = weights_i * weights_j
+
+                # Append indices and weights
+                idxs_list.append(valid_idxs)
+                weights_list.append(weights)
+
+        # Concatenate everything
+        idxs = torch.cat(idxs_list, dim=0)
+        weights = torch.cat(weights_list, dim=0)
+        counts = torch.zeros(batch_size * input_width * input_height, dtype=weights.dtype)
+        if flow.is_cuda:
+            counts = counts.cuda()
+        counts.scatter_add_(0, idxs, weights)
+        range_map = counts.reshape(batch_size, 1, input_height, input_width)
+
+        return range_map
+    
     @property
     def is_cuda(self):
         return next(self.parameters()).is_cuda
@@ -195,11 +282,45 @@ class FlowStageModel(pl.LightningModule):
         flow_error = mse_loss(flow_pred, flow)
         return photometric_error, smoothness_term, second_order_error, flow_error
     
-    def training_step(self, batch, batch_idx):
-        if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'train')
+    def general_step_occ_aware(self, batch, batch_idx, mode):
+        if len(batch) == 2:
+            imgs, flow = batch
+        elif len(batch) == 3:
+            imgs, flow, occ = batch
         else:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
+            raise ValueError('Not supported dataset')
+        img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
+        # flow prediction
+        flow_pred = self(imgs)
+        img_warped = self.warp(img2, flow_pred)
+        # range map calculation
+        with torch.no_grad():
+            # backward flow prediction
+            back_flow_pred = self(torch.cat((img2, img1), dim=1))
+            # calculate range map
+            range_map = self.compute_range_map(back_flow_pred)
+            # compute occlusion mask
+            # 0: non-occluded, 1: occluded
+            occ = 1. - torch.clamp(range_map, min=0.0, max=1.0)
+            
+        # calculate photometric error
+        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
+        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
+        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        #calculate difference between predicted flow and ground truth flow
+        mse_loss = torch.nn.MSELoss()
+        flow_error = mse_loss(flow_pred, flow)
+        return photometric_error, smoothness_term, second_order_error, flow_error
+    
+    def training_step(self, batch, batch_idx):
+        if not self.occ_aware:
+            if not self.with_occ:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'train')
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
+        else:
+             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'train')
+                
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         if self.global_step % self.log_every_n_steps == 0: 
@@ -216,10 +337,14 @@ class FlowStageModel(pl.LightningModule):
         tensorboard.add_scalars("losses", {"train_loss": avg_loss}, global_step = self.current_epoch)
     
     def validation_step(self, batch, batch_idx):
-        if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'val')
+        if not self.occ_aware:
+            if not self.with_occ:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'val')
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         else:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
+             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'val')
+                
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
 
         if batch_idx == 0: 
@@ -237,10 +362,14 @@ class FlowStageModel(pl.LightningModule):
         self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)    
     
     def test_step(self, batch, batch_idx):
-        if not self.with_occ:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'test')
+        if not self.occ_aware:
+            if not self.with_occ:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'test')
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         else:
-            photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
+             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'test')
+                
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
         if batch_idx == 0:
