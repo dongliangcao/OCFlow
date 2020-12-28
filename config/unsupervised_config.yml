@@ -22,4 +22,5 @@ smoothness_penalty: 0.05
 supervised_flow: true
 with_occ: false
 static_occ: false
+occlusion_ratio: 0.5
 result_dir: gan_img_logs
