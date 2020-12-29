@@ -106,7 +106,7 @@ class FlowStageModel(pl.LightningModule):
         if model == 'simple':
             self.flow_pred = SimpleFlowNet()
         elif model == 'pwc':
-            self.flow_pred = PWCNet()
+            self.flow_pred = FlowNetCV()
         elif model == 'flownets':
             self.flow_pred = FlowNetS()
         elif model == 'flownetc':

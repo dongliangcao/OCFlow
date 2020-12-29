@@ -220,7 +220,7 @@ class PWCNet(torch.nn.Module):
 
 		self.netRefiner = Refiner()
 
-# 		self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
+		self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
 	# end
 
 	def forward(self, imgs):
@@ -234,6 +234,6 @@ class PWCNet(torch.nn.Module):
 		objEstimate = self.netThr(tenFirst[-4], tenSecond[-4], objEstimate)
 		objEstimate = self.netTwo(tenFirst[-5], tenSecond[-5], objEstimate)
 		pred_flow = objEstimate['tenFlow'] + self.netRefiner(objEstimate['tenFeat'])
-		return torch.nn.functional.interpolate(pred_flow, scale_factor=4, mode='bilinear', align_corners=False)
+		return 20 * torch.nn.functional.interpolate(pred_flow, scale_factor=4, mode='bilinear', align_corners=False)
 	# end
 # end

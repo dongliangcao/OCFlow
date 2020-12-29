@@ -23,7 +23,7 @@ class FlowModel(pl.LightningModule):
         if model == 'simple':
             self.model = SimpleFlowNet()
         elif model == 'pwc':
-            self.model = PWCNet()
+            self.model = FlowNetCV()
         elif model == 'flownets':
             self.model = FlowNetS()
         elif model == 'flownetc':

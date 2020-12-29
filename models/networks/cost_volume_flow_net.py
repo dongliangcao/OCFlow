@@ -236,5 +236,5 @@ class FlowNetCV(nn.Module):
  
         x = self.dc_conv4(self.dc_conv3(self.dc_conv2(self.dc_conv1(x))))
         flow2 = flow2 + self.dc_conv7(self.dc_conv6(self.dc_conv5(x)))
-        
-        return F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=False)
+        flow1 = F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=False) * 20
+        return flow1
