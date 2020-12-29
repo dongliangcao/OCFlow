@@ -220,7 +220,7 @@ class PWCNet(torch.nn.Module):
 
 		self.netRefiner = Refiner()
 
-		self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
+# 		self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
 	# end
 
 	def forward(self, imgs):

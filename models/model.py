@@ -12,6 +12,7 @@ from models.networks.flow_net_s import FlowNetS
 from models.networks.flow_net_c import FlowNetC
 from models.networks.cost_volume_flow_net import FlowNetCV
 from models.networks.flow_net import FlowNet
+from models.networks.pwc_net import PWCNet
 from models.networks.efficient_flow_net import EFlowNet, EFlowNet2
 from models.flow_model import FlowModel
 from models.networks.simple_occlusion_net import SimpleOcclusionNet
@@ -105,7 +106,7 @@ class FlowStageModel(pl.LightningModule):
         if model == 'simple':
             self.flow_pred = SimpleFlowNet()
         elif model == 'pwc':
-            self.flow_pred = FlowNetCV()
+            self.flow_pred = PWCNet()
         elif model == 'flownets':
             self.flow_pred = FlowNetS()
         elif model == 'flownetc':
