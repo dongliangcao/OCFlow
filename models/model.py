@@ -301,16 +301,21 @@ class FlowStageModel(pl.LightningModule):
             range_map = self.compute_range_map(back_flow_pred)
             # compute occlusion mask
             # 0: non-occluded, 1: occluded
-            occ = 1. - torch.clamp(range_map, min=0.0, max=1.0)
+            occ_pred = 1. - torch.clamp(range_map, min=0.0, max=1.0)
             
         # calculate photometric error
-        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
-        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
+        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
+        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
         #calculate difference between predicted flow and ground truth flow
         mse_loss = torch.nn.MSELoss()
         flow_error = mse_loss(flow_pred, flow)
-        return photometric_error, smoothness_term, second_order_error, flow_error
+        # calculate the photometric error in occluded region
+        photometric_error_occ =  (charbonnier_loss(img_warped - img1, reduction=False) * occ_pred).sum() / (3 * occ_pred.sum() + 1e-16)
+        if occ is not None:
+            occ_error = F.binary_cross_entropy(occ, occ_pred)
+            return photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error
+        return photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ
     
     def training_step(self, batch, batch_idx):
         if not self.occ_aware:
@@ -319,7 +324,11 @@ class FlowStageModel(pl.LightningModule):
             else:
                 photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
         else:
-             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'train')
+            losses = self.general_step_occ_aware(batch, batch_idx, 'train')
+            if len(losses) == 5:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
@@ -329,6 +338,10 @@ class FlowStageModel(pl.LightningModule):
             tensorboard.add_scalar("train_smoothness", smoothness_term, global_step = self.global_step)
             tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
             tensorboard.add_scalar("train_flow_error", flow_error, global_step = self.global_step)
+            if occ_error is not None:
+                tensorboard.add_scalar("train_occ_error", occ_error, global_step = self.global_step)
+            if photometric_error_occ is not None:
+                tensorboard.add_scalar("train_photometric_occ", photometric_error_occ, global_step = self.global_step)
         return loss
     
     def training_epoch_end(self, outputs): 
@@ -343,7 +356,11 @@ class FlowStageModel(pl.LightningModule):
             else:
                 photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         else:
-             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'val')
+            losses = self.general_step_occ_aware(batch, batch_idx, 'train')
+            if len(losses) == 5:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
 
@@ -353,6 +370,10 @@ class FlowStageModel(pl.LightningModule):
             tensorboard.add_scalar("val_smoothness", smoothness_term, global_step = self.global_step)
             tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
             tensorboard.add_scalar("val_flow_error", flow_error, global_step = self.global_step)
+            if occ_error is not None:
+                tensorboard.add_scalar("val_occ_error", occ_error, global_step = self.global_step)
+            if photometric_error_occ is not None:
+                tensorboard.add_scalar("val_photometric_occ", photometric_error_occ, global_step = self.global_step)
         return loss
 
     def validation_epoch_end(self, outputs): 
@@ -368,7 +389,11 @@ class FlowStageModel(pl.LightningModule):
             else:
                 photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         else:
-             photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ_aware(batch, batch_idx, 'test')
+            losses = self.general_step_occ_aware(batch, batch_idx, 'train')
+            if len(losses) == 5:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+            else:
+                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
         loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
         
@@ -378,6 +403,10 @@ class FlowStageModel(pl.LightningModule):
             tensorboard.add_scalar("test_smoothness", smoothness_term, global_step = self.global_step)
             tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
             tensorboard.add_scalar("test_flow_error", flow_error, global_step = self.global_step)
+            if occ_error is not None:
+                tensorboard.add_scalar("test_occ_error", occ_error, global_step = self.global_step)
+            if photometric_error_occ is not None:
+                tensorboard.add_scalar("val_photometric_occ", photometric_error_occ, global_step = self.global_step)
         return loss
     def test_epoch_end(self, outputs): 
         avg_loss = torch.stack([x for x in outputs]).mean()
@@ -490,7 +519,7 @@ class InpaintingStageModel(pl.LightningModule):
         tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("recon_epoch_loss", {"val_loss": avg_recon}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True, sync_dist = True)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx):
         recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'test')
@@ -647,7 +676,7 @@ class InpaintingGConvModel(pl.LightningModule):
         tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("recon_epoch_loss", {"val_loss": avg_recon}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True, sync_dist = True)
+        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
