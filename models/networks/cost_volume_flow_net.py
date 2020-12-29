@@ -1,5 +1,5 @@
 from models.networks.cost_volume_net import CostVolumeLayer
-
+from models.networks.correlation import correlation
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -54,7 +54,7 @@ class FlowNetCV(nn.Module):
         self.conv6a  = conv(196,196, kernel_size=3, stride=1)
         self.conv6b  = conv(196,196, kernel_size=3, stride=1)
 
-        self.corr    = CostVolumeLayer()
+        self.corr    = correlation.FunctionCorrelation
         self.leakyRELU = nn.LeakyReLU(0.1)
         
         nd = (2*4+1)**2
