@@ -51,8 +51,9 @@ if __name__ == '__main__':
     assert network_type in ['flow', 'inpainting', 'twostage'], 'Unknown network type'
     if network_type == 'flow':
         assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']
-        hparams['smoothness_weight'] = args['smoothness_weight']
-        hparams['second_order_weight'] = args['second_order_weight']
+        hparams['photo_weight'] = args['photo_weight']
+        hparams['smooth1_weight'] = args['smooth1_weight']
+        hparams['smooth2_weight'] = args['smooth2_weight']
         hparams['with_occ'] = args['with_occ']
         hparams['occ_aware'] = args['occ_aware']
         model = FlowStageModel(hparams=hparams)

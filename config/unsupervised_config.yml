@@ -17,8 +17,9 @@ reconst_weight: 1.0
 root: /home/tnguyen/dataset/FlyingChairs_release/data
 n_display_images: 3
 log_image_every_epoch: 1
-second_order_weight: 0.0
-smoothness_penalty: 0.05
+photo_weight: 1.0
+smooth1_weight: 0.0
+smooth2_weight: 1.0
 supervised_flow: true
 with_occ: false
 static_occ: false

@@ -22,31 +22,28 @@ from PIL import Image
 import numpy as np
 import os
 
-from Forward_Warp import forward_warp
-def charbonnier_loss(loss, alpha=0.001, reduction=True):
+def robust_l1(x, alpha=0.001):
     """
     Args:
-        loss: torch.Tensor
+        x: torch.Tensor
     Return:
-        cb_loss: torch.Tensor, charbonnier_loss
+        loss: torch.Tensor, charbonnier_loss
     """
-    cb_loss = torch.sqrt(loss**2 + alpha**2)
-    if reduction:
-        cb_loss = cb_loss.mean()
-    return cb_loss
-
-def second_order_photometric_error(img_pred, img, reduction=True):
-    img_pred_dx, img_pred_dy = gradient(img_pred)
-    img_dx, img_dy = gradient(img)
-    img_pred_dx_norm = torch.norm(img_pred_dx, p=2, dim=1)
-    img_pred_dy_norm = torch.norm(img_pred_dy, p=2, dim=1)
-    img_dx_norm = torch.norm(img_dx, p=2, dim=1)
-    img_dy_norm = torch.norm(img_dy, p=2, dim=1)
-    
-    loss = charbonnier_loss(img_pred_dx_norm - img_dx_norm, reduction=reduction) + charbonnier_loss(img_pred_dy_norm - img_dy_norm, reduction=reduction)
+    loss = (x**2 + alpha**2)**0.5 
     return loss
 
-def gradient(img):
+def photometric_error(img_pred, img, occ=None):
+    """
+    occ: 1 occluded, 0 non-occluded
+    """
+    error = robust_l1(img_pred - img)
+    if occ is not None:
+        loss = torch.sum(error * (1-occ))/(torch.sum(1-occ)*3 + 1e-16)
+    else:
+        loss = torch.mean(error)
+    return loss
+
+def gradient(img, stride=1):
     """
     Args:
         img: torch.Tensor, dim: [B, C, H, W]
@@ -56,12 +53,12 @@ def gradient(img):
     """
     assert img.dim() == 4
     _, _, ny, nx = img.shape
-    dx = img[:, :, :, [*range(1, nx), nx-1]] - img
-    dy = img[:, :, [*range(1, ny), ny - 1], :] - img
+    dx = img[:, :, :, stride:] - img[:, :, :, :-stride]
+    dy = img[:, :, stride:, :] - img[:, :, :-stride, :]
     
     return dx, dy
 
-def edge_aware_smoothness_loss(img, flow, alpha=10.0, reduction=True):
+def edge_aware_smoothness_loss(img, flow, alpha=100.0):
     """
     Args:
         img: torch.Tensor, dim: [B, C, H, W]
@@ -82,9 +79,33 @@ def edge_aware_smoothness_loss(img, flow, alpha=10.0, reduction=True):
     flow_dy_norm = torch.norm(flow_dy, p=2, dim=1)
     loss_dx = (flow_dx_norm) * torch.exp(-alpha * img_dx_norm)
     loss_dy = (flow_dy_norm) * torch.exp(-alpha * img_dy_norm)
-    loss = charbonnier_loss(loss_dx, reduction = reduction) + charbonnier_loss(loss_dy, reduction = reduction)
+    loss = 0.5 * (robust_l1(loss_dx) + robust_l1(loss_dy))
+    loss = torch.mean(loss)
+    return loss
+
+def first_order_smoothness_loss(img, flow, alpha=100.0):
+    img_gx, img_gy = gradient(img)
+    weights_x = torch.exp(-torch.mean((alpha * img_gx)**2, dim=1, keepdim=True))
+    weights_y = torch.exp(-torch.mean((alpha * img_gy)**2, dim=1, keepdim=True))
+
+    flow_gx, flow_gy = gradient(flow)
+    loss = 0.5 * (torch.mean(weights_x * robust_l1(flow_gx)) + torch.mean(weights_y * robust_l1(flow_gy)))
     
     return loss
+
+def second_order_smoothness_loss(img, flow, alpha=100.0):
+    img_gx, img_gy = gradient(img, stride=2)
+    weights_xx = torch.exp(-torch.mean((alpha * img_gx)**2, dim=1, keepdim=True))
+    weights_yy = torch.exp(-torch.mean((alpha * img_gy)**2, dim=1, keepdim=True))
+
+    flow_gx, flow_gy = gradient(flow)
+    flow_gxx, _ = gradient(flow_gx)
+    _, flow_gyy = gradient(flow_gy)
+
+    loss = 0.5 * (torch.mean(weights_xx * robust_l1(flow_gxx)) + torch.mean(weights_yy * robust_l1(flow_gyy)))
+    loss = torch.mean(loss)
+    return loss
+
 def img2photo(imgs):
     return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
 
@@ -96,13 +117,15 @@ class FlowStageModel(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.lr = hparams['learning_rate']
-        self.smoothness_weight = hparams.get('smoothness_weight', 0.0)
-        self.second_order_weight = hparams.get('second_order_weight', 0.0)
+        self.photo_weight = hparams.get('photo_weight', 1.0)
+        self.smooth1_weight = hparams.get('smooth1_weight', 0.0)
+        self.smooth2_weight = hparams.get('smooth2_weight', 1.0)
         self.with_occ = hparams.get('with_occ', False)
         self.log_every_n_steps = hparams.get('log_every_n_steps', 20)
         self.occ_aware = hparams.get('occ_aware', False)
         
         model = self.hparams.get('model', 'simple')
+        self.model = model
         if model == 'simple':
             self.flow_pred = SimpleFlowNet()
         elif model == 'pwc':
@@ -255,33 +278,47 @@ class FlowStageModel(pl.LightningModule):
             raise ValueError('Not supported dataset')
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
         # flow prediction
-        flow_pred = self(imgs)
+        if self.model == 'pwc':
+            flow_pred, flow_l2 = self(imgs)
+        else:
+            flow_pred = self(imgs)
         img_warped = self.warp(img2, flow_pred)
         
         # calculate photometric error
-        photometric_error = charbonnier_loss(img_warped - img1)
-        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
-        second_order_error = second_order_photometric_error(img_warped, img1)
+        photo = photometric_error(img_warped, img1)
+        if self.model == 'pwc':
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
+            smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
+        else:
+            smooth1 = first_order_smoothness_loss(img1, flow_pred)
+            smooth2 = second_order_smoothness_loss(img1, flow_pred)
         #calculate difference between predicted flow and ground truth flow
-        mse_loss = torch.nn.MSELoss()
-        flow_error = mse_loss(flow_pred, flow)
-        return photometric_error, smoothness_term, second_order_error, flow_error
+        flow_error = F.mse_loss(flow_pred, flow)
+        return photo, smooth1, smooth2, flow_error
     
     def general_step_occ(self, batch, batch_idx, mode):
         imgs, flow, occ = batch
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
         # flow prediction
-        flow_pred = self(imgs)
+        if self.model == 'pwc':
+            flow_pred, flow_l2 = self(imgs)
+        else:
+            flow_pred = self(imgs)
         img_warped = self.warp(img2, flow_pred)
         
         # calculate photometric error
-        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
-        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ)).sum() / (3*(1 - occ).sum() + 1e-16)
-        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        photo = photometric_error(img_warped, img1, occ)
+        if self.model == 'pwc':
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
+            smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
+        else:
+            smooth1 = first_order_smoothness_loss(img1, flow_pred)
+            smooth2 = second_order_smoothness_loss(img1, flow_pred)
         #calculate difference between predicted flow and ground truth flow
-        mse_loss = torch.nn.MSELoss()
-        flow_error = mse_loss(flow_pred, flow)
-        return photometric_error, smoothness_term, second_order_error, flow_error
+        flow_error = F.mse_loss(flow_pred, flow)
+        return photo, smooth1, smooth2, flow_error
     
     def general_step_occ_aware(self, batch, batch_idx, mode):
         if len(batch) == 2:
@@ -292,12 +329,18 @@ class FlowStageModel(pl.LightningModule):
             raise ValueError('Not supported dataset')
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
         # flow prediction
-        flow_pred = self(imgs)
+        if self.model == 'pwc':
+            flow_pred, flow_l2 = self(imgs)
+        else:
+            flow_pred = self(imgs)
         img_warped = self.warp(img2, flow_pred)
         # range map calculation
         with torch.no_grad():
             # backward flow prediction
-            back_flow_pred = self(torch.cat((img2, img1), dim=1))
+            if self.model == 'pwc':
+                back_flow_pred, _ = self(torch.cat((img2, img1), dim=1))
+            else:
+                back_flow_pred = self(torch.cat((img2, img1), dim=1))
             # calculate range map
             range_map = self.compute_range_map(back_flow_pred)
             # compute occlusion mask
@@ -305,44 +348,48 @@ class FlowStageModel(pl.LightningModule):
             occ_pred = 1. - torch.clamp(range_map, min=0.0, max=1.0)
             
         # calculate photometric error
-        photometric_error = (charbonnier_loss(img_warped - img1, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
-        second_order_error = (second_order_photometric_error(img_warped, img1, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
-        smoothness_term = edge_aware_smoothness_loss(img1, flow_pred)
+        photo = photometric_error(img_warped, img1, occ_pred)
+        if self.model == 'pwc':
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
+            smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
+        else:
+            smooth1 = first_order_smoothness_loss(img1, flow_pred)
+            smooth2 = second_order_smoothness_loss(img1, flow_pred)
         #calculate difference between predicted flow and ground truth flow
-        mse_loss = torch.nn.MSELoss()
-        flow_error = mse_loss(flow_pred, flow)
+        flow_error = F.mse_loss(flow_pred, flow)
         # calculate the photometric error in occluded region
-        photometric_error_occ =  (charbonnier_loss(img_warped - img1, reduction=False) * occ_pred).sum() / (3 * occ_pred.sum() + 1e-16)
+        photo_occ = photometric_error(img_warped, img1, 1.0-occ_pred)
         if occ is not None:
             occ_error = F.binary_cross_entropy(occ, occ_pred)
-            return photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error
-        return photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ
+            return photo, smooth1, smooth2, flow_error, photo_occ, occ_error
+        return photo, smooth1, smooth2, flow_error, photo_occ
     
     def training_step(self, batch, batch_idx):
         if not self.occ_aware:
             if not self.with_occ:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'train')
+                photo, smooth1, smooth2, flow_error = self.general_step(batch, batch_idx, 'train')
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'train')
+                photo, smooth1, smooth2, flow_error = self.general_step_occ(batch, batch_idx, 'train')
         else:
             losses = self.general_step_occ_aware(batch, batch_idx, 'train')
             if len(losses) == 5:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+                photo, smooth1, smooth2, flow_error, photo_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
+                photo, smooth1, smooth2, flow_error, photo_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
-        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
+        loss = self.photo_weight * photo + self.smooth1_weight * smooth1 + self.smooth2_weight * smooth2
         
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
-            tensorboard.add_scalar("train_smoothness", smoothness_term, global_step = self.global_step)
-            tensorboard.add_scalar("train_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_photometric", photo, global_step = self.global_step)
+            tensorboard.add_scalar("train_smooth1", smooth1, global_step = self.global_step)
+            tensorboard.add_scalar("train_smooth2", smooth2, global_step = self.global_step)
             tensorboard.add_scalar("train_flow_error", flow_error, global_step = self.global_step)
-            if occ_error is not None:
+            if self.occ_aware and len(batch) == 3:
                 tensorboard.add_scalar("train_occ_error", occ_error, global_step = self.global_step)
-            if photometric_error_occ is not None:
-                tensorboard.add_scalar("train_photometric_occ", photometric_error_occ, global_step = self.global_step)
+            if self.occ_aware:
+                tensorboard.add_scalar("train_photometric_occ", photo_occ, global_step = self.global_step)
         return loss
     
     def training_epoch_end(self, outputs): 
@@ -353,28 +400,28 @@ class FlowStageModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         if not self.occ_aware:
             if not self.with_occ:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'val')
+                photo, smooth1, smooth2, flow_error = self.general_step(batch, batch_idx, 'val')
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'val')
+                photo, smooth1, smooth2, flow_error = self.general_step_occ(batch, batch_idx, 'val')
         else:
-            losses = self.general_step_occ_aware(batch, batch_idx, 'train')
+            losses = self.general_step_occ_aware(batch, batch_idx, 'val')
             if len(losses) == 5:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+                photo, smooth1, smooth2, flow_error, photo_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
+                photo, smooth1, smooth2, flow_error, photo_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
-        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
-
-        if batch_idx == 0: 
+        loss = self.photo_weight * photo + self.smooth1_weight * smooth1 + self.smooth2_weight * smooth2
+        
+        if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
-            tensorboard.add_scalar("val_smoothness", smoothness_term, global_step = self.global_step)
-            tensorboard.add_scalar("val_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_photometric", photo, global_step = self.global_step)
+            tensorboard.add_scalar("val_smooth1", smooth1, global_step = self.global_step)
+            tensorboard.add_scalar("val_smooth2", smooth2, global_step = self.global_step)
             tensorboard.add_scalar("val_flow_error", flow_error, global_step = self.global_step)
-            if occ_error is not None:
+            if self.occ_aware and len(batch) == 3:
                 tensorboard.add_scalar("val_occ_error", occ_error, global_step = self.global_step)
-            if photometric_error_occ is not None:
-                tensorboard.add_scalar("val_photometric_occ", photometric_error_occ, global_step = self.global_step)
+            if self.occ_aware:
+                tensorboard.add_scalar("val_photometric_occ", photo_occ, global_step = self.global_step)
         return loss
 
     def validation_epoch_end(self, outputs): 
@@ -386,29 +433,30 @@ class FlowStageModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         if not self.occ_aware:
             if not self.with_occ:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step(batch, batch_idx, 'test')
+                photo, smooth1, smooth2, flow_error = self.general_step(batch, batch_idx, 'test')
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error = self.general_step_occ(batch, batch_idx, 'test')
+                photo, smooth1, smooth2, flow_error = self.general_step_occ(batch, batch_idx, 'test')
         else:
-            losses = self.general_step_occ_aware(batch, batch_idx, 'train')
+            losses = self.general_step_occ_aware(batch, batch_idx, 'test')
             if len(losses) == 5:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
+                photo, smooth1, smooth2, flow_error, photo_occ = losses[0], losses[1], losses[2], losses[3], losses[4]
             else:
-                photometric_error, smoothness_term, second_order_error, flow_error, photometric_error_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
+                photo, smooth1, smooth2, flow_error, photo_occ, occ_error = losses[0], losses[1], losses[2], losses[3], losses[4], losses[5]
                 
-        loss = photometric_error + self.smoothness_weight * smoothness_term + self.second_order_weight * second_order_error
+        loss = self.photo_weight * photo + self.smooth1_weight * smooth1 + self.smooth2_weight * smooth2
         
-        if batch_idx == 0:
+        if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
-            tensorboard.add_scalar("test_smoothness", smoothness_term, global_step = self.global_step)
-            tensorboard.add_scalar("test_second_order", second_order_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_photometric", photo, global_step = self.global_step)
+            tensorboard.add_scalar("test_smooth1", smooth1, global_step = self.global_step)
+            tensorboard.add_scalar("test_smooth2", smooth2, global_step = self.global_step)
             tensorboard.add_scalar("test_flow_error", flow_error, global_step = self.global_step)
-            if occ_error is not None:
+            if self.occ_aware and len(batch) == 3:
                 tensorboard.add_scalar("test_occ_error", occ_error, global_step = self.global_step)
-            if photometric_error_occ is not None:
-                tensorboard.add_scalar("val_photometric_occ", photometric_error_occ, global_step = self.global_step)
+            if self.occ_aware:
+                tensorboard.add_scalar("test_photometric_occ", photo_occ, global_step = self.global_step)
         return loss
+
     def test_epoch_end(self, outputs): 
         avg_loss = torch.stack([x for x in outputs]).mean()
         tensorboard = self.logger.experiment
