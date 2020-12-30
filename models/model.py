@@ -637,36 +637,36 @@ class InpaintingGConvModel(pl.LightningModule):
         d_loss = Dloss(pred_pos, pred_neg)
        
         if batch_idx == 0:
-            tensorboard = self.logger.experiment
-            tensorboard.add_scalars("whole_loss",{"val_loss": whole_loss} , global_step = self.global_step)
-            tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
-            if self.current_epoch % self.log_image_every_epoch == 0: 
-
-                val_save_dir = os.path.join(self.result_dir, "val_{}".format(self.current_epoch))
-                val_save_real_dir = os.path.join(val_save_dir, "real")
-                val_save_gen_dir = os.path.join(val_save_dir, "gen")
-                if not os.path.exists(val_save_real_dir):
-                    os.makedirs(val_save_real_dir)
-                    os.makedirs(val_save_gen_dir)
-
-                saved_images =img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=2))
-                h, w = saved_images.shape[1]//5, saved_images.shape[2]
-                j= 0
-                n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
-                for val_img in saved_images:
-                    real_img = val_img[(3*h):(4*h), :,:]
-                    gen_img = val_img[(4*h):,:,:] 
-                    real_img = Image.fromarray(real_img.astype(np.uint8))
-                    gen_img = Image.fromarray(gen_img.astype(np.uint8))
-                    real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
-                    gen_img.save(os.path.join(val_save_gen_dir, "{}.png".format(j)))
-                    j += 1
-                    if j == n_display_images: 
-                        break
+            if self.global_rank == 0:
                 tensorboard = self.logger.experiment
-                tensorboard.add_images('val/imgs', saved_images[:n_display_images].astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
+                tensorboard.add_scalars("whole_loss",{"val_loss": whole_loss} , global_step = self.global_step)
+                tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
+                if self.current_epoch % self.log_image_every_epoch == 0: 
+                    val_save_dir = os.path.join(self.result_dir, "val_{}".format(self.current_epoch))
+                    val_save_real_dir = os.path.join(val_save_dir, "real")
+                    val_save_gen_dir = os.path.join(val_save_dir, "gen")
+                    if not os.path.exists(val_save_real_dir):
+                        os.makedirs(val_save_real_dir)
+                        os.makedirs(val_save_gen_dir)
+
+                    saved_images =img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=2))
+                    h, w = saved_images.shape[1]//5, saved_images.shape[2]
+                    j= 0
+                    n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
+                    for val_img in saved_images:
+                        real_img = val_img[(3*h):(4*h), :,:]
+                        gen_img = val_img[(4*h):,:,:] 
+                        real_img = Image.fromarray(real_img.astype(np.uint8))
+                        gen_img = Image.fromarray(gen_img.astype(np.uint8))
+                        real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
+                        gen_img.save(os.path.join(val_save_gen_dir, "{}.png".format(j)))
+                        j += 1
+                        if j == n_display_images: 
+                            break
+                    tensorboard = self.logger.experiment
+                    tensorboard.add_images('val/imgs', saved_images[:n_display_images].astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
 
         return (r_occluded, r_non_occluded, r_loss)
     def validation_epoch_end(self, outputs): 
@@ -700,11 +700,12 @@ class InpaintingGConvModel(pl.LightningModule):
         d_loss = Dloss(pred_pos, pred_neg)
        
         if batch_idx == 0:
-            tensorboard = self.logger.experiment
-            tensorboard.add_scalars("whole_loss",{"test_loss": whole_loss} , global_step = self.global_step)
-            tensorboard.add_scalars("recon_loss", {"test_loss": r_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("gan_loss", {"test_loss":g_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("discriminator_loss",{ "test_loss":d_loss}, global_step = self.global_step)
+            if self.global_rank == 0:
+                tensorboard = self.logger.experiment
+                tensorboard.add_scalars("whole_loss",{"test_loss": whole_loss} , global_step = self.global_step)
+                tensorboard.add_scalars("recon_loss", {"test_loss": r_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("gan_loss", {"test_loss":g_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("discriminator_loss",{ "test_loss":d_loss}, global_step = self.global_step)
         return  (r_occluded, r_non_occluded, r_loss)
     def test_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
