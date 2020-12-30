@@ -1,5 +1,5 @@
 from models.networks.cost_volume_net import CostVolumeLayer
-
+from models.networks.correlation import correlation
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +17,6 @@ def predict_flow(in_planes):
 
 def deconv(in_planes, out_planes, kernel_size=4, stride=2, padding=1):
     return nn.ConvTranspose2d(in_planes, out_planes, kernel_size, stride, padding, bias=True)
-
 
 
 class FlowNetCV(nn.Module):
@@ -47,7 +46,7 @@ class FlowNetCV(nn.Module):
         self.conv6a  = conv(196,196, kernel_size=3, stride=1)
         self.conv6b  = conv(196,196, kernel_size=3, stride=1)
 
-        self.corr    = CostVolumeLayer()
+        self.corr    = correlation.FunctionCorrelation
         self.leakyRELU = nn.LeakyReLU(0.1)
         
         nd = (2*4+1)**2
@@ -100,7 +99,7 @@ class FlowNetCV(nn.Module):
         self.conv2_3 = conv(od+dd[2],64,  kernel_size=3, stride=1)
         self.conv2_4 = conv(od+dd[3],32,  kernel_size=3, stride=1)
         self.predict_flow2 = predict_flow(od+dd[4]) 
-#         self.deconv2 = deconv(2, 2, kernel_size=4, stride=2, padding=1) 
+        self.deconv2 = deconv(2, 2, kernel_size=4, stride=2, padding=1) 
         
         self.dc_conv1 = conv(od+dd[4], 128, kernel_size=3, stride=1, padding=1,  dilation=1)
         self.dc_conv2 = conv(128,      128, kernel_size=3, stride=1, padding=2,  dilation=2)
@@ -109,9 +108,6 @@ class FlowNetCV(nn.Module):
         self.dc_conv5 = conv(96,       64,  kernel_size=3, stride=1, padding=16, dilation=16)
         self.dc_conv6 = conv(64,       32,  kernel_size=3, stride=1, padding=1,  dilation=1)
         self.dc_conv7 = predict_flow(32)
-        
-        
-        self.upsample = nn.Upsample(scale_factor=4, mode='bilinear')
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -240,5 +236,5 @@ class FlowNetCV(nn.Module):
  
         x = self.dc_conv4(self.dc_conv3(self.dc_conv2(self.dc_conv1(x))))
         flow2 = flow2 + self.dc_conv7(self.dc_conv6(self.dc_conv5(x)))
-        
-        return self.upsample(flow2)
+        flow1 = F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=False) * 20
+        return flow1

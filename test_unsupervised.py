@@ -54,6 +54,7 @@ if __name__ == '__main__':
         hparams['smoothness_weight'] = args['smoothness_weight']
         hparams['second_order_weight'] = args['second_order_weight']
         hparams['with_occ'] = args['with_occ']
+        hparams['occ_aware'] = args['occ_aware']
         model = FlowStageModel(hparams=hparams)
     elif network_type == 'inpainting':
         assert hparams['model'] in ['simple', 'gated']
