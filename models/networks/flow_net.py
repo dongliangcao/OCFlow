@@ -1,5 +1,5 @@
 from models.networks.feature_pyramid_net import FeaturePyramidNet
-from models.networks.cost_volume_net import CostVolumeLayer
+from models.networks.correlation_layer import compute_cost_volume
 from models.networks.context_net import ContextNetwork
 
 import torch
@@ -40,7 +40,7 @@ class FlowNet(nn.Module):
     """optical flow prediction network"""
     def __init__(self):
         super().__init__()
-        self.correlation_layer = CostVolumeLayer()
+        self.correlation_layer = compute_cost_volume
         self.feature_pyramid_network = FeaturePyramidNet()
         self.opticalflow_estimators = nn.ModuleList()
         for (d, l) in zip([277, 213, 181, 149, 117], [6, 5, 4, 3, 2]):

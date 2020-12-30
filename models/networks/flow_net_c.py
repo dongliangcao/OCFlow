@@ -6,7 +6,7 @@ from torch.nn import init
 import math
 import numpy as np
 
-from models.networks.cost_volume_net import CostVolumeLayer
+from models.networks.correlation_layer import compute_cost_volume
 
 class FlowNetC(nn.Module):
     def __init__(self, batchNorm=True):
@@ -19,7 +19,7 @@ class FlowNetC(nn.Module):
         self.conv3   = conv(self.batchNorm, 128,  256, kernel_size=5, stride=2)
         self.conv_redir  = conv(self.batchNorm, 256,   32, kernel_size=1, stride=1)
 
-        self.corr = CostVolumeLayer(10)
+        self.corr = compute_cost_volume
 
         self.corr_activation = nn.LeakyReLU(0.1,inplace=True)
         self.conv3_1 = conv(self.batchNorm, 473,  256)

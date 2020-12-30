@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from models.networks.correlation import correlation
+from models.networks.correlation_layer import compute_cost_volume
 
 
 def backwarp(img, flow):
@@ -32,9 +32,9 @@ def backwarp(img, flow):
 ##########################################################
 
 class PWCNet(torch.nn.Module):
-	def __init__(self):
+	def __init__(self, pre_train=True):
 		super(PWCNet, self).__init__()
-
+		self.pre_train = pre_train
 		class Extractor(torch.nn.Module):
 			def __init__(self):
 				super(Extractor, self).__init__()
@@ -155,7 +155,7 @@ class PWCNet(torch.nn.Module):
 					tenFlow = None
 					tenFeat = None
 
-					tenVolume = torch.nn.functional.leaky_relu(input=correlation.FunctionCorrelation(tenFirst=tenFirst, tenSecond=tenSecond), negative_slope=0.1, inplace=False)
+					tenVolume = torch.nn.functional.leaky_relu(input=compute_cost_volume(tenFirst, tenSecond), negative_slope=0.1, inplace=False)
 
 					tenFeat = torch.cat([ tenVolume ], 1)
 
@@ -163,7 +163,7 @@ class PWCNet(torch.nn.Module):
 					tenFlow = self.netUpflow(objPrevious['tenFlow'])
 					tenFeat = self.netUpfeat(objPrevious['tenFeat'])
 
-					tenVolume = torch.nn.functional.leaky_relu(input=correlation.FunctionCorrelation(tenFirst=tenFirst, tenSecond=backwarp(tenSecond, tenFlow * self.fltBackwarp)), negative_slope=0.1, inplace=False)
+					tenVolume = torch.nn.functional.leaky_relu(input=compute_cost_volume(tenFirst, backwarp(tenSecond, tenFlow * self.fltBackwarp)), negative_slope=0.1, inplace=False)
 
 					tenFeat = torch.cat([ tenVolume, tenFirst, tenFlow, tenFeat ], 1)
 
@@ -219,8 +219,8 @@ class PWCNet(torch.nn.Module):
 		self.netSix = Decoder(6)
 
 		self.netRefiner = Refiner()
-
-		self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
+		if self.pre_train:
+			self.load_state_dict({ strKey.replace('module', 'net'): tenWeight for strKey, tenWeight in torch.hub.load_state_dict_from_url(url='http://content.sniklaus.com/github/pytorch-pwc/network-' + 'default' + '.pytorch', file_name='pwc-' + 'default').items() })
 	# end
 
 	def forward(self, imgs):
