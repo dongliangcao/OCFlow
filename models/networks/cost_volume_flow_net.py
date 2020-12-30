@@ -1,4 +1,4 @@
-from models.networks.correlation_layer import compute_cost_volume
+from models.networks.correlation_layer import compute_cost_volume, normalize_features
 
 import torch
 import torch.nn as nn
@@ -45,7 +45,8 @@ class FlowNetCV(nn.Module):
         self.conv6aa = conv(128,196, kernel_size=3, stride=2)
         self.conv6a  = conv(196,196, kernel_size=3, stride=1)
         self.conv6b  = conv(196,196, kernel_size=3, stride=1)
-
+        
+        self.normalize = normalize_features
         self.corr    = compute_cost_volume
         self.leakyRELU = nn.LeakyReLU(0.1)
         
@@ -166,7 +167,7 @@ class FlowNetCV(nn.Module):
         c16 = self.conv6b(self.conv6a(self.conv6aa(c15)))
         c26 = self.conv6b(self.conv6a(self.conv6aa(c25)))
 
-
+        c16, c26 = self.normalize([c16, c26])
         corr6 = self.corr(c16, c26) 
         corr6 = self.leakyRELU(corr6)   
 
@@ -182,6 +183,7 @@ class FlowNetCV(nn.Module):
 
         
         warp5 = self.warp(c25, up_flow6*0.625)
+        c15, warp5 = self.normalize([c15, warp5])
         corr5 = self.corr(c15, warp5) 
         corr5 = self.leakyRELU(corr5)
         x = torch.cat((corr5, c15, up_flow6, up_feat6), 1)
@@ -196,6 +198,7 @@ class FlowNetCV(nn.Module):
 
        
         warp4 = self.warp(c24, up_flow5*1.25)
+        c14, warp4 = self.normalize([c14, warp4])
         corr4 = self.corr(c14, warp4)  
         corr4 = self.leakyRELU(corr4)
         x = torch.cat((corr4, c14, up_flow5, up_feat5), 1)
@@ -210,6 +213,7 @@ class FlowNetCV(nn.Module):
 
 
         warp3 = self.warp(c23, up_flow4*2.5)
+        c13, warp3 = self.normalize([c13, warp3])
         corr3 = self.corr(c13, warp3) 
         corr3 = self.leakyRELU(corr3)
         x = torch.cat((corr3, c13, up_flow4, up_feat4), 1)
@@ -223,7 +227,8 @@ class FlowNetCV(nn.Module):
         up_feat3 = self.upfeat3(x)
 
 
-        warp2 = self.warp(c22, up_flow3*5.0) 
+        warp2 = self.warp(c22, up_flow3*5.0)
+        c12, warp2 = self.normalize([c12, warp2])
         corr2 = self.corr(c12, warp2)
         corr2 = self.leakyRELU(corr2)
         x = torch.cat((corr2, c12, up_flow3, up_feat3), 1)

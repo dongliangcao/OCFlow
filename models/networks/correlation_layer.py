@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import collections
+
 def compute_cost_volume(features1, features2, max_displacement=4):
     """Compute the cost volume between features1 and features2.
 
@@ -37,4 +39,44 @@ def compute_cost_volume(features1, features2, max_displacement=4):
     cost_volume = torch.cat(cost_list, dim=1)
     return cost_volume
 
+def normalize_features(feature_list, normalize=True, center=True, moments_across_channels=True,
+                        moments_across_images=True):
+    """Normalizes feature tensors (e.g., before computing the cost volume).
 
+    Args:
+        feature_list: list of Tensors, each with dimensions [b, c, h, w]
+        normalize: bool flag, divide features by their standard deviation
+        center: bool flag, subtract feature mean
+        moments_across_channels: bool flag, compute mean and std across channels
+        moments_across_images: bool flag, compute mean and std across images
+
+    Returns:
+        list, normalized feature_list
+    """
+
+    # Compute feature statistics
+
+    statistics = collections.defaultdict(list)
+    dim = (1, 2, 3) if moments_across_channels else (2, 3)
+    for feature_image in feature_list:
+        variance, mean = torch.var_mean(feature_image, dim=dim, keepdim=True, unbiased=False)
+        statistics['mean'].append(mean)
+        statistics['var'].append(variance)
+
+    if moments_across_images:
+        statistics['mean'] = [torch.mean(torch.stack(statistics['mean']))] * len(feature_list)
+        statistics['var'] = [torch.mean(torch.stack(statistics['var']))] * len(feature_list)
+
+    statistics['std'] = [torch.sqrt(v + 1e-16) for v in statistics['var']]
+    
+    # Center and normalize features
+    if center:
+        feature_list = [
+            f - mean for f, mean in zip(feature_list, statistics['mean'])
+        ] 
+
+    if normalize:
+        feature_list = [
+            f / std for f, std in zip(feature_list, statistics['std'])
+        ]
+    return feature_list
