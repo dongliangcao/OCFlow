@@ -33,7 +33,7 @@ if __name__ == '__main__':
     with open(file_name) as f:
         args = yaml.load(f, Loader=yaml.FullLoader)
     
-    hparams = dict(network_type = args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'])
+    hparams = dict(network_type=args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'], displacement=args['displacement'])
     
     network_type = args['network_type']
     assert network_type in ['flow', 'occ', 'flow-occ', 'inpainting'], 'Unknown network type'

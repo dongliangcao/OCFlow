@@ -123,13 +123,13 @@ class FlowStageModel(pl.LightningModule):
         self.with_occ = hparams.get('with_occ', False)
         self.log_every_n_steps = hparams.get('log_every_n_steps', 20)
         self.occ_aware = hparams.get('occ_aware', False)
-        
+        self.displacement = hparams.get('displacement', 4)
         model = self.hparams.get('model', 'simple')
         self.model = model
         if model == 'simple':
             self.flow_pred = SimpleFlowNet()
         elif model == 'pwc':
-            self.flow_pred = FlowNetCV()
+            self.flow_pred = FlowNetCV(displacement=self.displacement)
         elif model == 'flownets':
             self.flow_pred = FlowNetS()
         elif model == 'flownetc':

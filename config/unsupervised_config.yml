@@ -20,6 +20,7 @@ log_image_every_epoch: 1
 photo_weight: 1.0
 smooth1_weight: 0.0
 smooth2_weight: 1.0
+displacement: 4
 supervised_flow: true
 with_occ: false
 static_occ: false
