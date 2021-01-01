@@ -135,3 +135,6 @@ tensorboard_logs/
 # Jupyter notebook
 *.ipynb
 *.png
+
+# vs code
+.vscode/

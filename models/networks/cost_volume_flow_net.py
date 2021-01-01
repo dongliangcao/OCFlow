@@ -1,9 +1,9 @@
-from models.networks.cost_volume_net import CostVolumeLayer
-from models.networks.correlation import correlation
+from models.networks.correlation_layer import compute_cost_volume, normalize_features
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
+
 import numpy as np
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):   
@@ -24,7 +24,7 @@ class FlowNetCV(nn.Module):
     optical flow prediction network considers cost volume calculation based on PWC-Net
 
     """
-    def __init__(self):
+    def __init__(self, displacement=4):
         super().__init__()
 
         self.conv1a  = conv(3,   16, kernel_size=3, stride=2)
@@ -45,11 +45,13 @@ class FlowNetCV(nn.Module):
         self.conv6aa = conv(128,196, kernel_size=3, stride=2)
         self.conv6a  = conv(196,196, kernel_size=3, stride=1)
         self.conv6b  = conv(196,196, kernel_size=3, stride=1)
-
-        self.corr    = correlation.FunctionCorrelation
+        
+        self.normalize = normalize_features
+#         self.corr    = compute_cost_volume
         self.leakyRELU = nn.LeakyReLU(0.1)
         
-        nd = (2*4+1)**2
+        self.displacement = displacement
+        nd = (2*displacement+1)**2
         dd = np.cumsum([128,128,96,64,32])
 
         od = nd
@@ -166,8 +168,8 @@ class FlowNetCV(nn.Module):
         c16 = self.conv6b(self.conv6a(self.conv6aa(c15)))
         c26 = self.conv6b(self.conv6a(self.conv6aa(c25)))
 
-
-        corr6 = self.corr(c16, c26) 
+        c16, c26 = self.normalize([c16, c26])
+        corr6 = compute_cost_volume(c16, c26, max_displacement=self.displacement) 
         corr6 = self.leakyRELU(corr6)   
 
 
@@ -182,7 +184,8 @@ class FlowNetCV(nn.Module):
 
         
         warp5 = self.warp(c25, up_flow6*0.625)
-        corr5 = self.corr(c15, warp5) 
+        c15, warp5 = self.normalize([c15, warp5])
+        corr5 = compute_cost_volume(c15, warp5, max_displacement=self.displacement) 
         corr5 = self.leakyRELU(corr5)
         x = torch.cat((corr5, c15, up_flow6, up_feat6), 1)
         x = torch.cat((self.conv5_0(x), x),1)
@@ -196,7 +199,8 @@ class FlowNetCV(nn.Module):
 
        
         warp4 = self.warp(c24, up_flow5*1.25)
-        corr4 = self.corr(c14, warp4)  
+        c14, warp4 = self.normalize([c14, warp4])
+        corr4 = compute_cost_volume(c14, warp4, max_displacement=self.displacement)  
         corr4 = self.leakyRELU(corr4)
         x = torch.cat((corr4, c14, up_flow5, up_feat5), 1)
         x = torch.cat((self.conv4_0(x), x),1)
@@ -210,7 +214,8 @@ class FlowNetCV(nn.Module):
 
 
         warp3 = self.warp(c23, up_flow4*2.5)
-        corr3 = self.corr(c13, warp3) 
+        c13, warp3 = self.normalize([c13, warp3])
+        corr3 = compute_cost_volume(c13, warp3, max_displacement=self.displacement) 
         corr3 = self.leakyRELU(corr3)
         x = torch.cat((corr3, c13, up_flow4, up_feat4), 1)
         x = torch.cat((self.conv3_0(x), x),1)
@@ -223,8 +228,9 @@ class FlowNetCV(nn.Module):
         up_feat3 = self.upfeat3(x)
 
 
-        warp2 = self.warp(c22, up_flow3*5.0) 
-        corr2 = self.corr(c12, warp2)
+        warp2 = self.warp(c22, up_flow3*5.0)
+        c12, warp2 = self.normalize([c12, warp2])
+        corr2 = compute_cost_volume(c12, warp2, max_displacement=self.displacement)
         corr2 = self.leakyRELU(corr2)
         x = torch.cat((corr2, c12, up_flow3, up_feat3), 1)
         x = torch.cat((self.conv2_0(x), x),1)
@@ -237,4 +243,4 @@ class FlowNetCV(nn.Module):
         x = self.dc_conv4(self.dc_conv3(self.dc_conv2(self.dc_conv1(x))))
         flow2 = flow2 + self.dc_conv7(self.dc_conv6(self.dc_conv5(x)))
         flow1 = F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=False) * 20
-        return flow1
+        return flow1, flow2 * 5.0

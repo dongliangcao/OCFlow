@@ -20,26 +20,30 @@ class FlowModel(pl.LightningModule):
         self.hparams = hparams
         self.lr = hparams['learning_rate']
         model = self.hparams.get('model', 'simple')
+        self.model = model
+        displacement = self.hparams.get('displacement', 4)
         if model == 'simple':
-            self.model = SimpleFlowNet()
+            self.flow_pred = SimpleFlowNet()
         elif model == 'pwc':
-            self.model = FlowNetCV()
+            self.flow_pred = FlowNetCV(displacement=displacement)
         elif model == 'flownets':
-            self.model = FlowNetS()
+            self.flow_pred = FlowNetS()
         elif model == 'flownetc':
-            self.model = FlowNetC()
+            self.flow_pred = FlowNetC()
         elif model == 'flownet':
-            self.model = FlowNet()
+            self.flow_pred = FlowNet()
         elif model == 'eflownet':
-            self.model = EFlowNet()
+            self.flow_pred = EFlowNet()
         elif model == 'eflownet2':
-            self.model = EFlowNet2()
+            self.flow_pred = EFlowNet2()
         else:
             raise ValueError(f'Unsupported model: {model}')
         
     def forward(self, x):
-        out = self.model(x)
-        
+        if self.model == 'pwc':
+            out, _ = self.flow_pred(x)
+        else:
+            out = self.flow_pred(x)
         return out
     
     def warp(self, img, flow):
@@ -175,7 +179,7 @@ class FlowModel(pl.LightningModule):
             imgs, flow, _ = batch
         else:
             raise ValueError('Not supported dataset')
-        flow_pred = self.model(imgs)
+        flow_pred = self(imgs)
         
         loss = F.mse_loss(flow_pred, flow)
         

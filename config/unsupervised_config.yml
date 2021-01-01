@@ -17,8 +17,10 @@ reconst_weight: 0.5
 root: /home/tnguyen/dataset/FlyingChairs2/train
 n_display_images: 3
 log_image_every_epoch: 1
-second_order_weight: 0.0
-smoothness_penalty: 0.05
+photo_weight: 1.0
+smooth1_weight: 0.0
+smooth2_weight: 1.0
+displacement: 4
 supervised_flow: true
 inpainting_stage: gated
 with_occ: false
