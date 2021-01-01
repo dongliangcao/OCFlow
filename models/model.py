@@ -22,7 +22,7 @@ from PIL import Image
 import numpy as np
 import os
 
-from Forward_Warp import forward_warp
+#from Forward_Warp import forward_warp
 def charbonnier_loss(loss, alpha=0.001, reduction=True):
     """
     Args:
@@ -911,10 +911,25 @@ class TwoStageModelGC(pl.LightningModule):
         self.reconst_weight = hparams.get('reconst_weight', 1.0)
         self.log_every_n_steps = hparams.get('log_every_n_steps', 1)
         self.occ_pred = SimpleOcclusionNet()
-        self.inpainting = InpaintingNet()
         inpainting_root = hparams.get('inpainting_root', None)
-        if inpainting_root:
-            self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
+        self.inpainting_stage = hparams.get('inpainting_stage', 'gated')
+        if self.inpainting_stage == 'simple': 
+            if inpainting_root:
+                self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
+            else:     
+                self.inpainting = InpaintingNet()
+        elif self.inpainting_stage == 'gated': 
+            if inpainting_root:
+                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
+            else: 
+                self.inpainting = InpaintSANet(img_size=self.img_size)
+        else: 
+            if inpainting_root: 
+                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
+            else: 
+                self.inpainting = InpaintSANetOrg(img_size=self.img_size)
+        
+        
         
         # we will freeze the inpainting network
         for param in self.inpainting.parameters():
@@ -962,6 +977,7 @@ class TwoStageModelGC(pl.LightningModule):
         torch.save(self.state_dict(), path)
         
     def general_step(self, batch, batch_idx, mode):
+        occ = None
         if not isinstance(batch, (list, tuple)):
             imgs = batch
         elif len(batch) == 2:
@@ -975,12 +991,11 @@ class TwoStageModelGC(pl.LightningModule):
         occ_pred = self.occ_pred(imgs)
         # warp image use ground truth optical flow
         img_warped = self.warp(img2, flow)
-        
-        # get occluded image
-        img_occluded = img_warped * (1 - occ_pred) # 1: occluded 0: non-occluded
-
         # get completed image
-        img_completed = self.inpainting(img_occluded)
+        if self.inpainting_stage =='simple': 
+            img_completed = self.inpainting(img_warped, occ_pred)
+        elif self.inpainting_stage =='gated' or self.inpainting_stage == 'gated_org': 
+            _,img_completed = self.inpainting(img_warped, occ_pred)
         
         # calculate the reconstruction error
         #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
@@ -996,6 +1011,7 @@ class TwoStageModelGC(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'train')
+        bce_loss = None
         if len(losses) == 2:
             photometric_error, reconst_error = losses[0], losses[1]
         else:
@@ -1017,6 +1033,7 @@ class TwoStageModelGC(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'val')
+        bce_loss = None
         if len(losses) == 2:
             photometric_error, reconst_error = losses[0], losses[1]
         else:
@@ -1038,6 +1055,7 @@ class TwoStageModelGC(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
+        bce_loss = None
         if len(losses) == 2:
             photometric_error, reconst_error = losses[0], losses[1]
         else:

@@ -83,13 +83,15 @@ if __name__ == '__main__':
                 hparams['supervised_flow'] = False
             model = TwoStageModel(hparams=hparams)
         else: 
+            hparams['inpainting_stage'] = args['inpainting_stage']
+            assert hparams['inpainting_stage'] in ['gated', 'gated_org', 'simple']
             model = TwoStageModelGC(hparams=hparams)
 
     max_epochs = args['epochs']
     #specify data module
     dataset_name = args['dataset_name']
     
-    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting']
+    assert dataset_name in ['ImgFlowOcc', 'MpiSintelClean', 'MpiSintelFinal', 'MpiSintelCleanOcc', 'MpiSintelFinalOcc', 'MpiSintelCleanFlowOcc', 'MpiSintelFinalFlowOcc', 'MpiSintelCleanInpainting', 'MpiSintelFinalInpainting', 'FlyingChairsInpainting', 'FlyingChairs2', 'FlyingChairs']
     data_module = DatasetModule(root=args['root'],image_size=image_size, batch_size=args['batch_size'], dataset_name=dataset_name, static_occ=args['static_occ'], overfit=args['overfit'], occlusion_ratio=args['occlusion_ratio'])
     data_module.prepare_data()
     data_module.setup()
@@ -108,12 +110,12 @@ if __name__ == '__main__':
     tb_logger = pl_loggers.TensorBoardLogger('tensorboard_logs/')
     #specify Trainer and start training
     if not args['find_best_lr']: 
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
-        #trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         trainer.fit(model, datamodule=data_module)
     else: 
-        #trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
+        #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         lr_finder = trainer.tuner.lr_find(model, datamodule=data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
         print(suggested_lr)
