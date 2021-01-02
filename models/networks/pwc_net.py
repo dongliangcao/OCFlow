@@ -24,7 +24,7 @@ def backwarp(img, flow):
 	# permute vgrid to size [B, H, W, 2] to support grid_sample function
 	vgrid = vgrid.permute(0, 2, 3, 1)
 
-	output = F.grid_sample(img, vgrid, align_corners=False)
+	output = F.grid_sample(img, vgrid, align_corners=True)
 
 	return output
 # end
