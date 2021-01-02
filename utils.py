@@ -45,12 +45,12 @@ def warp(img, flow, is_mask=False):
         # permute vgrid to size [B, H, W, 2] to support grid_sample function
         vgrid = vgrid.permute(0, 2, 3, 1)
         
-        output = F.grid_sample(img, vgrid, align_corners=False)
+        output = F.grid_sample(img, vgrid, align_corners=True)
         if is_mask:
             mask = torch.ones(img.size())
             if img.is_cuda:
                 mask = mask.cuda()
-            mask = F.grid_sample(mask, vgrid, align_corners=False)
+            mask = F.grid_sample(mask, vgrid, align_corners=True)
 
             mask[mask <0.9999] = 0
             mask[mask >0] = 1
@@ -87,13 +87,12 @@ def visualize_inpainting(img, complete_img, predict_img, occlusion_map):
     plt.title('complete image')
     plt.show()
     
-def visualize_occ(imgs, occ, pred_occ):
+def visualize_occ(imgs, pred_occ, occ):
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
     img1 = img1.detach().cpu().numpy().transpose(1, 2, 0)
     img2 = img2.detach().cpu().numpy().transpose(1, 2, 0)
     occ = occ.detach().cpu().numpy().transpose(1, 2, 0)
     pred_occ = pred_occ.detach().cpu().numpy().transpose(1, 2, 0)
-    
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 2, 1)
     plt.imshow(img1/2.0 + 0.5)
@@ -106,16 +105,16 @@ def visualize_occ(imgs, occ, pred_occ):
     plt.title('image 2')
 
     plt.subplot(2, 2, 3)
-    plt.imshow(occ, cmap='gray')
-    plt.axis('off')
-    plt.title('ground truth occlusion')
-    
-    plt.subplot(2, 2, 4)
-    plt.imshow(pred_occ, cmap='gray')
+    plt.imshow(pred_occ, cmap='gray', vmin=0.0, vmax=1.0)
     plt.axis('off')
     plt.title('predicted occlusion')
+    
+    
+    plt.subplot(2, 2, 4)
+    plt.imshow(occ, cmap='gray', vmin=0.0, vmax=1.0)
+    plt.axis('off')
+    plt.title('ground truth occlusion')
     plt.show()
-
     
 def visualize_flow_and_warp(imgs, img_pred_warped, img_warped, predicted_flow, flow):    
     img1, img2 = imgs[0:3, :, :], imgs[3:6, :, :]
@@ -127,7 +126,11 @@ def visualize_flow_and_warp(imgs, img_pred_warped, img_warped, predicted_flow, f
     flow = flow.detach().cpu().numpy().transpose(1, 2, 0)
     pred_flow_viz = flow2img(predicted_flow)
     flow_viz = flow2img(flow)
-
+    print('average epe', evaluate_flow(flow, predicted_flow))
+    print('ground truth photo', np.mean(np.abs(img_warped - img1)))
+    print('predict photo', np.mean(np.abs(img_pred_warped - img1)))
+    print('gt flow mean', np.abs(flow).mean(axis=(0, 1)))
+    print('predict flow mean', np.abs(predicted_flow).mean(axis=(0, 1)))
     plt.figure(figsize=(12, 9))
     plt.subplot(3, 2, 1)
     plt.imshow(img1/2.0 + 0.5)

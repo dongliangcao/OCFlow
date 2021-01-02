@@ -173,7 +173,7 @@ class FlowStageModel(pl.LightningModule):
         # permute vgrid to size [B, H, W, 2] to support grid_sample function
         vgrid = vgrid.permute(0, 2, 3, 1)
         
-        output = F.grid_sample(img, vgrid, align_corners=False)
+        output = F.grid_sample(img, vgrid, align_corners=True)
         
         return output
     
@@ -310,7 +310,7 @@ class FlowStageModel(pl.LightningModule):
         # calculate photometric error
         photo = photometric_error(img_warped, img1, occ)
         if self.model == 'pwc':
-            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=True)
             smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
             smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
         else:
@@ -350,7 +350,7 @@ class FlowStageModel(pl.LightningModule):
         # calculate photometric error
         photo = photometric_error(img_warped, img1, occ_pred)
         if self.model == 'pwc':
-            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=True)
             smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
             smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
         else:
@@ -831,7 +831,7 @@ class TwoStageModel(pl.LightningModule):
         # permute vgrid to size [B, H, W, 2] to support grid_sample function
         vgrid = vgrid.permute(0, 2, 3, 1)
         
-        output = F.grid_sample(img, vgrid, align_corners=False)
+        output = F.grid_sample(img, vgrid, align_corners=True)
         
         return output
     
@@ -997,7 +997,7 @@ class TwoStageModelGC(pl.LightningModule):
         # permute vgrid to size [B, H, W, 2] to support grid_sample function
         vgrid = vgrid.permute(0, 2, 3, 1)
         
-        output = F.grid_sample(img, vgrid, align_corners=False)
+        output = F.grid_sample(img, vgrid, align_corners=True)
         
         return output
     

@@ -233,7 +233,8 @@ class PWCNet(torch.nn.Module):
 		objEstimate = self.netFou(tenFirst[-3], tenSecond[-3], objEstimate)
 		objEstimate = self.netThr(tenFirst[-4], tenSecond[-4], objEstimate)
 		objEstimate = self.netTwo(tenFirst[-5], tenSecond[-5], objEstimate)
-		pred_flow = objEstimate['tenFlow'] + self.netRefiner(objEstimate['tenFeat'])
-		return 20 * torch.nn.functional.interpolate(pred_flow, scale_factor=4, mode='bilinear', align_corners=False)
+		flow2 = objEstimate['tenFlow'] + self.netRefiner(objEstimate['tenFeat'])
+		flow1 = 20 * torch.nn.functional.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=True)        
+		return flow1, flow2 * 5.0
 	# end
 # end

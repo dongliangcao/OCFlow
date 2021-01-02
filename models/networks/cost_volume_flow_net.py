@@ -111,11 +111,11 @@ class FlowNetCV(nn.Module):
         self.dc_conv6 = conv(64,       32,  kernel_size=3, stride=1, padding=1,  dilation=1)
         self.dc_conv7 = predict_flow(32)
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
-                nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
-                if m.bias is not None:
-                    m.bias.data.zero_()
+#         for m in self.modules():
+#             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+#                 nn.init.kaiming_normal_(m.weight.data, mode='fan_in')
+#                 if m.bias is not None:
+#                     m.bias.data.zero_()
 
 
     def warp(self, img, flow):
@@ -242,5 +242,5 @@ class FlowNetCV(nn.Module):
  
         x = self.dc_conv4(self.dc_conv3(self.dc_conv2(self.dc_conv1(x))))
         flow2 = flow2 + self.dc_conv7(self.dc_conv6(self.dc_conv5(x)))
-        flow1 = F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=False) * 20
+        flow1 = F.interpolate(flow2, scale_factor=4, mode='bilinear', align_corners=True) * 20
         return flow1, flow2 * 5.0
