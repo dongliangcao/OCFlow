@@ -453,8 +453,10 @@ class MpiSintelFinalInpainting(MpiSintelInpainting):
 
 class FlyingChairs(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
-        self.transform = transform
+        self.transform  = transform
         self.replicates = replicates
+        self.image_size = image_size
+        self.stack_imgs = stack_imgs
 
         images = sorted( glob( join(root, '*.ppm') ) )
 
@@ -568,6 +570,85 @@ class FlyingChairsInpainting(Dataset):
             img, occlusion_map = occ(img)
             
             return img, complete_img, occlusion_map
+class FlyingChairs2(Dataset):
+    def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
+        self.transform  = transform
+        self.replicates = replicates
+        self.image_size = image_size
+        self.stack_imgs = stack_imgs
+        images = sorted( glob( join(root, '*-img_*.png') ) )
+
+        self.flow_list = sorted( glob( join(root, '*-flow_01.flo') ) )
+        self.occ_list   = sorted( glob( join(root, '*-occ_01.png') ) )
+
+        assert (len(images)//2 == len(self.flow_list)) 
+        
+        self.image_list = []
+        for i in range(len(self.flow_list)):
+            im1 = images[2*i]
+            im2 = images[2*i + 1]
+            self.image_list += [ [ im1, im2 ] ]
+
+        assert len(self.image_list) == len(self.flow_list), 'The number of image pairs should be equal to the number of optical flow'
+
+        self.size = len(self.image_list)
+
+        self.render_size = list(frame_utils.read_gen(self.image_list[0][0]).shape[:2])
+        
+        if (self.render_size[0] % 64) or (self.render_size[1] % 64):
+            self.render_size[0] = ((self.render_size[0]) // 64) * 64
+            self.render_size[1] = ((self.render_size[1]) // 64) * 64
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return [self[ii] for ii in range(*index.indices(len(self)))]
+        else:
+            index = index % self.size
+            #preproces images
+
+            img1 = frame_utils.read_gen(self.image_list[index][0])
+            img2 = frame_utils.read_gen(self.image_list[index][1])
+
+            image_size = img1.shape[:2]
+
+            cropper = StaticCenterCrop(image_size, self.render_size)
+            img1 = cropper(img1)
+            img2 = cropper(img2)
+            
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img1 = resize(img1)
+                img2 = resize(img2)
+            if self.stack_imgs:
+                images = torch.stack((img1, img2))
+            else:
+                images = torch.cat((img1, img2))
+
+            #preprocess flow 
+
+            flow = frame_utils.read_gen(self.flow_list[index]).astype(np.float32)
+            flow = cropper(flow)
+            if self.image_size: 
+                flow = resize_flow(flow, self.image_size[0], self.image_size[1])
+            flow = flow.transpose(2,0,1)
+            flow = torch.from_numpy(flow)
+
+            #preprocess occlusion mask
+
+            occ = frame_utils.read_gen(self.occ_list[index]).astype(np.float32)
+            occ = cropper(occ)
+            toTensor = transforms.ToTensor()
+            occ = toTensor(occ)
+            if self.image_size: 
+                resize = transforms.Resize(self.image_size)
+                occ = resize(occ)
+            occ[occ > 0.5] = 1.0
+            occ[occ != 1.0] = 0.0
+            return images, flow, occ
     
     def __len__(self):
         return self.size * self.replicates
