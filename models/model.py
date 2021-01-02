@@ -287,7 +287,7 @@ class FlowStageModel(pl.LightningModule):
         # calculate photometric error
         photo = photometric_error(img_warped, img1)
         if self.model == 'pwc':
-            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=False)
+            img1_l2 = F.interpolate(img1, scale_factor=0.25, mode='bilinear', align_corners=True)
             smooth1 = first_order_smoothness_loss(img1_l2, flow_l2)
             smooth2 = second_order_smoothness_loss(img1_l2, flow_l2)
         else:
