@@ -867,27 +867,27 @@ class TwoStageModel(pl.LightningModule):
         img_completed = self.inpainting(img_occluded)
         
         # calculate the errors
-        smoothness_term = (edge_aware_smoothness_loss(img1, flow_pred, reduction=False) * (1 - occ_pred)).sum() / (3*(1 - occ_pred).sum() + 1e-16)
-        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=True)
-        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=True)
+        smoothness_term = first_order_smoothness_loss(img1, flow_pred)
+        photo_error = photometric_error(img_warped * (1 - occ_pred), img1 * (1 - occ_pred))
+        reconst_error = photometric_error(img_warped * occ_pred, img1 * occ_pred)
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred, occ)
-            return photometric_error, reconst_error, smoothness_term, bce_loss
-        return photometric_error, reconst_error, smoothness_term
+            return photo_error, reconst_error, smoothness_term, bce_loss
+        return photo_error, reconst_error, smoothness_term
     
     
     def training_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'train')
         if len(losses) == 3:
-            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+            photo_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
         else:
-            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
-        loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
+            photo_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
+        loss = photo_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
 
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
             tensorboard.add_scalar("train_smoothness", smoothness_term, global_step = self.global_step)
             if bce_loss is not None:
@@ -902,13 +902,13 @@ class TwoStageModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'val')
         if len(losses) == 3:
-            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+            photo_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
         else:
-            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
-        loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
+            photo_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
+        loss = photo_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
             tensorboard.add_scalar("val_smoothness", smoothness_term, global_step = self.global_step)
             if bce_loss is not None:
@@ -924,13 +924,13 @@ class TwoStageModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'test')
         if len(losses) == 3:
-            photometric_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
+            photo_error, reconst_error, smoothness_term = losses[0], losses[1], losses[2]
         else:
-            photometric_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
-        loss = photometric_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
+            photo_error, reconst_error, smoothness_term, bce_loss = losses[0], losses[1], losses[2], losses[3]
+        loss = photo_error + self.reconst_weight * reconst_error + self.smoothness_weight * smoothness_term
         if batch_idx == 0:
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
             tensorboard.add_scalar("test_smoothness", smoothness_term, global_step = self.global_step)
             if bce_loss is not None:
@@ -1048,26 +1048,26 @@ class TwoStageModelGC(pl.LightningModule):
         # calculate the reconstruction error
         #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         #reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=True) 
-        reconst_error = charbonnier_loss((img1 - img_completed) * occ_pred, reduction=True)
+        photo_error = photometric_error(img_warped * (1 - occ_pred), img1 * (1 - occ_pred))
+        reconst_error = photometric_error(img_warped * occ_pred, img1 * occ_pred)
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred, occ)
-            return photometric_error, reconst_error, bce_loss
-        return photometric_error, reconst_error
+            return photo_error, reconst_error, bce_loss
+        return photo_error, reconst_error
     
     
     def training_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'train')
         bce_loss = None
         if len(losses) == 2:
-            photometric_error, reconst_error = losses[0], losses[1]
+            photo_error, reconst_error = losses[0], losses[1]
         else:
-            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
-        loss = photometric_error + self.reconst_weight * reconst_error
+            photo_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photo_error + self.reconst_weight * reconst_error
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("train_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
             if bce_loss is not None:
                 tensorboard.add_scalar("train_bce_loss", bce_loss, global_step = self.global_step)
@@ -1083,13 +1083,13 @@ class TwoStageModelGC(pl.LightningModule):
         losses = self.general_step(batch, batch_idx, 'val')
         bce_loss = None
         if len(losses) == 2:
-            photometric_error, reconst_error = losses[0], losses[1]
+            photo_error, reconst_error = losses[0], losses[1]
         else:
-            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
-        loss = photometric_error + self.reconst_weight * reconst_error
+            photo_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photo_error + self.reconst_weight * reconst_error
         if batch_idx == 0:
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("val_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("val_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
             if bce_loss is not None:
                 tensorboard.add_scalar("val_bce_loss", bce_loss, global_step = self.global_step)
@@ -1105,13 +1105,13 @@ class TwoStageModelGC(pl.LightningModule):
         losses = self.general_step(batch, batch_idx, 'test')
         bce_loss = None
         if len(losses) == 2:
-            photometric_error, reconst_error = losses[0], losses[1]
+            photo_error, reconst_error = losses[0], losses[1]
         else:
-            photometric_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
-        loss = photometric_error + self.reconst_weight * reconst_error
+            photo_error, reconst_error, bce_loss = losses[0], losses[1], losses[2]
+        loss = photo_error + self.reconst_weight * reconst_error
         if batch_idx == 0:
             tensorboard = self.logger.experiment
-            tensorboard.add_scalar("test_photometric", photometric_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
             if bce_loss is not None:
                 tensorboard.add_scalar("test_bce_loss", bce_loss, global_step = self.global_step)
