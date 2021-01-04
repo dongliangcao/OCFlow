@@ -86,6 +86,9 @@ if __name__ == '__main__':
             model = TwoStageModel(hparams=hparams)
         else: 
             hparams['inpainting_stage'] = args['inpainting_stage']
+            hparams['n_display_images'] = args['n_display_images']
+            hparams['result_dir'] = result_dir
+            hparams['log_image_every_epoch'] = args['log_image_every_epoch']
             assert hparams['inpainting_stage'] in ['gated', 'gated_org', 'simple']
             model = TwoStageModelGC(hparams=hparams)
 

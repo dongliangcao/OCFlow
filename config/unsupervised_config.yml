@@ -6,12 +6,12 @@ flow_root: null
 image_size: !!python/tuple
 - 64
 - 128
-inpainting_root: /home/tnguyen/OCFlow/tensorboard_logs/default/version_1/checkpoints/epoch=565.ckpt
+inpainting_root: /home/tnguyen/OCFlow/tensorboard_logs/default/gated, random , 0.001/checkpoints/epoch=565.ckpt
 learning_rate: 0.004
 log_every_n_steps: 15
 model: with_gt_flow
 network_type: twostage
-org: true
+org: false
 overfit: false
 reconst_weight: 0.5
 root: /home/tnguyen/dataset/FlyingChairs2/train
@@ -27,4 +27,4 @@ with_occ: false
 static_occ: false
 occ_aware: true
 occlusion_ratio: 0.5
-result_dir: gan_img_logs
+result_dir: occlusion_mask_logs
