@@ -57,8 +57,10 @@ class StaticRandomOcclusion:
     def __init__(self, image_size, crop_size):
         self.th, self.tw = crop_size
         h, w = image_size
-        self.h1 = np.random.randint(0, h - self.th)
-        self.w1 = np.random.randint(0, w - self.tw)
+        #self.h1 = np.random.randint(0, h - self.th)
+        #self.w1 = np.random.randint(0, w - self.tw)
+        self.h1 = torch.randint(h - self.th, size =(1,)).item()
+        self.w1 = torch.randint(w - self.tw, size =(1,)).item()
         
     def __call__(self, img):
         occlusion_map = torch.zeros(1, img.shape[1], img.shape[2], dtype=torch.float32)
@@ -79,16 +81,22 @@ class FreeFormRandomOcclusion:
         i = 0
         h, w = img.shape[1], img.shape[2]
         while True:
-            start_x = int((np.random.randn() + 1) * h / 2)
-            start_y = int((np.random.randn() + 1) * w / 2)
-            for j in range(1 + np.random.randint(4)):
-                angle = np.random.randint(self.mangle)
+            #start_x = int((np.random.randn() + 1) * h / 2)
+            #start_y = int((np.random.randn() + 1) * w / 2)
+            start_x = int((torch.randn(1) + 1) * h / 2)
+            start_y = int((torch.randn(1) + 1) * w / 2)
+            #for j in range(1 + np.random.randint(4)):
+            for j in range(1 + torch.randint(4, size =(1,))):
+                #angle = np.random.randint(self.mangle)
+                angle = torch.rand(1).item()*self.mangle
                 if i % 2 == 0:
                     angle = 2 * np.pi - angle
-                length = 10 + np.random.randint(self.mlen)
-                brush_w = 5 + np.random.randint(self.mbw)
-                end_x = (start_x + length * np.sin(angle)).astype(np.int32)
-                end_y = (start_y + length * np.cos(angle)).astype(np.int32)
+                #length = 10 + np.random.randint(self.mlen)
+                #brush_w = 5 + np.random.randint(self.mbw)
+                length = 10 + torch.randint(self.mlen, size = (1,)).item()
+                brush_w = 5 + torch.randint(self.mbw, size = (1,)).item()
+                end_x = ((start_x + length * np.sin(angle))).astype(np.int32)
+                end_y = ((start_y + length * np.cos(angle))).astype(np.int32)
 
                 cv2.line(occlusion_map, (start_y, start_x), (end_y, end_x), 1.0, brush_w)
                 start_x, start_y = end_x, end_y
@@ -526,8 +534,8 @@ class FlyingChairsInpainting(Dataset):
         self.occlusion_ratio = occlusion_ratio
         self.static_occ = static_occ        
         
-        #self.image_list = sorted( glob( join(root, '*-img_*.png') ) )
-        self.image_list = sorted( glob( join(root, '*.ppm') ) )
+        self.image_list = sorted( glob( join(root, '*-img_*.png') ) )
+        #self.image_list = sorted( glob( join(root, '*.ppm') ) )
         self.size = len(self.image_list)
         self.render_size = list(frame_utils.read_gen(self.image_list[0]).shape[:2])
         
