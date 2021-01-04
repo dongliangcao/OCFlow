@@ -612,7 +612,7 @@ class InpaintingGConvModel(pl.LightningModule):
         self.n_display_images = hparams.get('n_display_images', 1)
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
-        print('result dir inside inpainting model is {}'.format(self.result_dir))
+        
         if self.org:
             self.generator = InpaintSANetOrg(img_size=self.img_size)
             self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
@@ -1110,6 +1110,7 @@ class TwoStageModelGC(pl.LightningModule):
         occ_pred = (torch.where(occ_pred_soft > 0.5, 1.0, 0.0) - occ_pred_soft).detach() + occ_pred_soft
         # warp image use ground truth optical flow
         img_warped = self.warp(img2, flow)
+        masked_imgs =  img_warped * (1 - occ_pred)
         # get completed image
         if self.inpainting_stage =='simple': 
             img_completed = self.inpainting(img_warped, occ_pred)
@@ -1143,13 +1144,14 @@ class TwoStageModelGC(pl.LightningModule):
                         os.makedirs(val_save_real_dir)
                         os.makedirs(val_save_pred_dir)
 
-                    saved_images =img2photo(torch.cat([occ, occ_pred], dim=2), rgb = False)
-                    h, w = saved_images.shape[1]//2, saved_images.shape[2]
+                    saved_occs =img2photo(torch.cat([occ, occ_pred, occ_pred_soft], dim=2), rgb = False)
+                    saved_images =img2photo(torch.cat([img1, img2,img_warped, masked_imgs, img_completed], dim=2))
+                    h, w = saved_occs.shape[1]//3, saved_occs.shape[2]
                     j= 0
                     n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
-                    for val_occ in saved_images:
+                    for val_occ in saved_occs:
                         real_occ = val_occ[:h, :,:].squeeze()
-                        pred_occ = val_occ[h:,:,:] .squeeze()
+                        pred_occ = val_occ[h:2*h,:,:] .squeeze()
                         real_occ = Image.fromarray(real_occ.astype(np.uint8)*255, 'L')
                         pred_occ = Image.fromarray(pred_occ.astype(np.uint8)*255, 'L')
                         real_occ.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
@@ -1158,7 +1160,8 @@ class TwoStageModelGC(pl.LightningModule):
                         if j == n_display_images: 
                             break
                     tensorboard = self.logger.experiment
-                    tensorboard.add_images('occlusion mask', saved_images[:n_display_images].astype(np.uint8)*255,self.current_epoch, dataformats = 'NHWC')
+                    tensorboard.add_images('occlusion mask', (saved_occs[:n_display_images]*255).astype(np.uint8),self.current_epoch, dataformats = 'NHWC')
+                    tensorboard.add_images('warped and inpainted image', saved_images[:n_display_images].astype(np.uint8),self.current_epoch, dataformats = 'NHWC')
         return loss
     
     def validation_epoch_end(self, outputs): 

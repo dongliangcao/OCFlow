@@ -43,11 +43,12 @@ if __name__ == '__main__':
     time_stamp = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
     result_dir = '{}/{}'.format(args['result_dir'], time_stamp)
     print('result directory is {}'.format(result_dir))
-    hparams = dict(network_type = args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'], log_every_n_steps = args['log_every_n_steps'], img_size=args['image_size'], org=args['org'])
+    image_size = args.get('image_size', None)
+    hparams = dict(network_type = args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'], log_every_n_steps = args['log_every_n_steps'], img_size=image_size, org=args['org'])
 
     network_type = args['network_type']
     automatic_optimization = True
-    image_size = args['image_size']
+    
     assert network_type in ['flow', 'inpainting', 'twostage'], 'Unknown network type'
     if network_type == 'flow':
         assert hparams['model'] in ['simple', 'flownets', 'flownetc', 'pwc', 'flownet', 'eflownet', 'eflownet2']

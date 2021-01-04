@@ -526,6 +526,7 @@ class FlyingChairsInpainting(Dataset):
         self.occlusion_ratio = occlusion_ratio
         self.static_occ = static_occ        
         
+        #self.image_list = sorted( glob( join(root, '*-img_*.png') ) )
         self.image_list = sorted( glob( join(root, '*.ppm') ) )
         self.size = len(self.image_list)
         self.render_size = list(frame_utils.read_gen(self.image_list[0]).shape[:2])
@@ -570,6 +571,8 @@ class FlyingChairsInpainting(Dataset):
             img, occlusion_map = occ(img)
             
             return img, complete_img, occlusion_map
+    def __len__(self):
+        return self.size * self.replicates
 class FlyingChairs2(Dataset):
     def __init__(self, transform=transforms.ToTensor(), root='', replicates=1, image_size =None, stack_imgs=True):
         self.transform  = transform
