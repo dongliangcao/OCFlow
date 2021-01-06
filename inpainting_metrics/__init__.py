@@ -1,11 +1,11 @@
 from .ssim.ssim import ssim
 from .psnr.psnr import psnr
 import torch
-def calculate_ssim(model, dataloader):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def calculate_ssim(model, dataloader, device, type = 'gated'):
     print(device)
     model.to(device)
-    
+    model.eval()
+    assert type in ['gated', 'simple'], 'Unknown network type'
     ssim_score = 0
     total = 0
     with torch.no_grad(): 
@@ -14,7 +14,10 @@ def calculate_ssim(model, dataloader):
             imgs = imgs.to(device)
             masks = masks.to(device)
             batch_size = imgs.size(0) 
-            coarse_imgs, recon_imgs = model(imgs,masks)
+            if type =='gated': 
+                coarse_imgs, recon_imgs = model(imgs,masks)
+            else: 
+                recon_imgs = model(imgs, masks)
             complete_imgs = recon_imgs * masks + imgs * (1 - masks)
             ssim_score = ssim_score + batch_size * ssim(imgs, complete_imgs, window_size = 4, size_average = True)
             total = total + batch_size
