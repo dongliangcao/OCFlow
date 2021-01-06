@@ -7,6 +7,8 @@ import pytorch_lightning as pl
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+import torchvision
+
 from models.networks.simple_flow_net import SimpleFlowNet
 from models.networks.flow_net_s import FlowNetS
 from models.networks.flow_net_c import FlowNetC
@@ -111,6 +113,39 @@ def img2photo(imgs, rgb = True):
         return ((imgs+1)*127.5).transpose(1,2).transpose(2,3).detach().cpu().numpy()
     else: 
         return imgs.transpose(1,2).transpose(2,3).detach().cpu().numpy()
+
+
+class VGGPerceptualLoss(nn.Module):
+    def __init__(self, resize=True, cuda=True):
+        super(VGGPerceptualLoss, self).__init__()
+        blocks = []
+        blocks.append(torchvision.models.vgg16(pretrained=True).features[:4].eval())
+        blocks.append(torchvision.models.vgg16(pretrained=True).features[4:9].eval())
+        blocks.append(torchvision.models.vgg16(pretrained=True).features[9:16].eval())
+        blocks.append(torchvision.models.vgg16(pretrained=True).features[16:23].eval())
+        # freeze vgg net
+        for bl in blocks:
+            for p in bl:
+                p.requires_grad = False
+        self.blocks = nn.ModuleList(blocks)
+        if cuda:
+            self.blocks = self.blocks.cuda()
+        self.transform = F.interpolate
+        self.resize = resize
+
+    def forward(self, input, target):
+        if self.resize:
+            input = self.transform(input, mode='bilinear', size=(224, 224), align_corners=False)
+            target = self.transform(target, mode='bilinear', size=(224, 224), align_corners=False)
+        loss = 0.0
+        x = input
+        y = target
+        for block in self.blocks:
+            x = block(x)
+            y = block(y)
+            loss += F.l1_loss(x, y)
+        return loss
+
 
 class FlowStageModel(pl.LightningModule):
     """
