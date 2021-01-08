@@ -166,9 +166,8 @@ class MpiSintel(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img1 = self.transform(img1)
@@ -255,9 +254,8 @@ class MpiSintelOcc(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img1 = self.transform(img1)
@@ -353,9 +351,8 @@ class MpiSintelFlowOcc(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img1 = self.transform(img1)
@@ -432,9 +429,8 @@ class MpiSintelInpainting(Dataset):
             complete_img = img.copy()
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img = resize(img)
-                complete_img = resize(complete_img)
+                img = cv2.resize(img, self.image_size, interpolation=cv2.INTER_LINEAR)
+                complete_img = cv2.resize(complete_img, self.image_size, interpolation=cv2.INTER_LINEAR)
             
             if self.transform:
                 img = self.transform(img)
@@ -510,10 +506,8 @@ class FlyingChairs(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
-
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
@@ -547,7 +541,7 @@ class FlyingChairsInpainting(Dataset):
         #self.image_list = sorted( glob( join(root, '*.ppm') ) )
         self.size = len(self.image_list)
         self.render_size = list(frame_utils.read_gen(self.image_list[0]).shape[:2])
-        
+        print(self.render_size)
         if (self.render_size[0] % 64) or (self.render_size[1] % 64):
             self.render_size[0] = ((self.render_size[0]) // 64) * 64
             self.render_size[1] = ((self.render_size[1]) // 64) * 64
@@ -567,9 +561,8 @@ class FlyingChairsInpainting(Dataset):
             complete_img = img.copy()
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img = resize(img)
-                complete_img = resize(complete_img)
+                img = cv2.resize(img, self.image_size, interpolation=cv2.INTER_LINEAR)
+                complete_img = cv2.resize(complete_img, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img = self.transform(img)
@@ -637,9 +630,8 @@ class FlyingChairs2(Dataset):
             img2 = cropper(img2)
 
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img1 = self.transform(img1)
@@ -711,9 +703,8 @@ class ImagesFromFolder(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
 
             if self.transform:
                 img1 = self.transform(img1)
@@ -766,10 +757,9 @@ class ImgFlowOccFromFolder(Dataset):
             img2 = cropper(img2)
             
             if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img1 = resize(img1)
-                img2 = resize(img2)
-                
+                img1 = cv2.resize(img1, self.image_size, interpolation=cv2.INTER_LINEAR)
+                img2 = cv2.resize(img2, self.image_size, interpolation=cv2.INTER_LINEAR)
+
             if self.transform:
                 img1 = self.transform(img1)
                 img2 = self.transform(img2)
