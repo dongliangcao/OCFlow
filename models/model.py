@@ -535,19 +535,18 @@ class InpaintingStageModel(pl.LightningModule):
         # inpainting
         pred_imgs = self.model(complete_imgs, occlusion_map)
         #reconst_error = (charbonnier_loss(pred_imgs - complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
-        second_order_error = (second_order_photometric_error(pred_imgs, complete_imgs, reduction=False) * occlusion_map).sum() / (3*occlusion_map.sum() + 1e-16)
         Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         recon_loss, rhole, runhole = Recon_Loss(complete_imgs, pred_imgs, occlusion_map)
-        return recon_loss,rhole, runhole, second_order_error
+        return recon_loss,rhole, runhole
     
     
     def training_step(self, batch, batch_idx):
-        recon_loss,rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'train')
+        recon_loss,rhole, runhole = self.general_step(batch, batch_idx, 'train')
         #loss = reconst_error + self.second_order_weight * second_order_error
 
-        if self.global_step % self.log_every_n_steps == 0: 
-            tensorboard = self.logger.experiment
-            tensorboard.add_scalars("second_order",{"train_loss": second_order_error}, global_step = self.global_step)
+#         if self.global_step % self.log_every_n_steps == 0: 
+#             tensorboard = self.logger.experiment
+#             tensorboard.add_scalars("second_order",{"train_loss": second_order_error}, global_step = self.global_step)
         return {'loss': recon_loss, 'occluded': rhole, 'non_occluded': runhole}
     def training_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x['occluded'] for x in outputs]).mean()
@@ -561,7 +560,6 @@ class InpaintingStageModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         _, imgs, masks = batch
         recon_imgs = self.model(imgs, masks)
-        second_order_error = (second_order_photometric_error(recon_imgs,imgs, reduction=False) * masks).sum() / (3*masks.sum() + 1e-16)
         Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         recon_loss, rhole, runhole = Recon_Loss(imgs, recon_imgs, masks)
         complete_imgs = recon_imgs * masks + imgs * (1 - masks)
@@ -569,7 +567,6 @@ class InpaintingStageModel(pl.LightningModule):
         
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalars("second_order", {"val_loss": second_order_error}, global_step = self.global_step)
 
             if self.current_epoch % self.log_image_every_epoch == 0: 
 
@@ -609,12 +606,11 @@ class InpaintingStageModel(pl.LightningModule):
         self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx):
-        recon_loss, rhole, runhole, second_order_error = self.general_step(batch, batch_idx, 'test')
+        recon_loss, rhole, runhole = self.general_step(batch, batch_idx, 'test')
         #loss = reconst_error + self.second_order_weight * second_order_error
         
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
-            tensorboard.add_scalars("second_order", {"test_loss": second_order_error}, global_step = self.global_step)
         return  (rhole, runhole, recon_loss)
     def test_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
