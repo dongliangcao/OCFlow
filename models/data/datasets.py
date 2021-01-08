@@ -165,13 +165,15 @@ class MpiSintel(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -252,13 +254,15 @@ class MpiSintelOcc(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -348,13 +352,15 @@ class MpiSintelFlowOcc(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -425,15 +431,16 @@ class MpiSintelInpainting(Dataset):
             
             complete_img = img.copy()
             
+            if self.image_size:
+                resize = transforms.Resize(self.image_size)
+                img = resize(img)
+                complete_img = resize(complete_img)
             
             if self.transform:
                 img = self.transform(img)
                 complete_img = self.transform(complete_img)
             
-            if self.image_size:
-                resize = transforms.Resize(self.image_size)
-                img = resize(img)
-                complete_img = resize(complete_img)
+            
             
             if self.static_occ:
                 h, w = img.shape[1], img.shape[2]
@@ -502,14 +509,16 @@ class FlyingChairs(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
-
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -557,15 +566,16 @@ class FlyingChairsInpainting(Dataset):
             
             complete_img = img.copy()
             
-            
-            if self.transform:
-                img = self.transform(img)
-                complete_img = self.transform(complete_img)
-            
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img = resize(img)
                 complete_img = resize(complete_img)
+
+            if self.transform:
+                img = self.transform(img)
+                complete_img = self.transform(complete_img)
+            
+            
             
             if self.static_occ:
                 h, w = img.shape[1], img.shape[2]
@@ -625,15 +635,17 @@ class FlyingChairs2(Dataset):
             cropper = StaticCenterCrop(image_size, self.render_size)
             img1 = cropper(img1)
             img2 = cropper(img2)
-            
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
 
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -698,13 +710,15 @@ class ImagesFromFolder(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
@@ -751,13 +765,15 @@ class ImgFlowOccFromFolder(Dataset):
             img1 = cropper(img1)
             img2 = cropper(img2)
             
-            if self.transform:
-                img1 = self.transform(img1)
-                img2 = self.transform(img2)
             if self.image_size:
                 resize = transforms.Resize(self.image_size)
                 img1 = resize(img1)
                 img2 = resize(img2)
+                
+            if self.transform:
+                img1 = self.transform(img1)
+                img2 = self.transform(img2)
+            
             if self.stack_imgs:
                 images = torch.stack((img1, img2))
             else:
