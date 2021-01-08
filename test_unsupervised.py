@@ -10,32 +10,6 @@ import torch
 import time
 
 if __name__ == '__main__':
-#     parser = argparse.ArgumentParser()
-#     #parameters for all models
-#     parser.add_argument('--network_type', type=str, help='Type of network: [flow, inpainting, twostage]', default='flow')
-#     parser.add_argument('--model', type=str, help='Type of model', default='simple')
-#     parser.add_argument('--dataset_name', type=str, help='Name of dataset', default = 'MpiSintelClean')
-#     parser.add_argument('--root', type=str, help='Data root')
-    
-#     parser.add_argument('--batch_size', type=int, help='Batch size', default=32)
-#     parser.add_argument('--epochs', type=int, help='Epochs to train', default=100)
-#     parser.add_argument('--learning_rate', type=float, help='Learning rate', default=1e-3) 
-#     parser.add_argument('--overfit_batches', type=int, help='Mode of training', default =0)
-#     parser.add_argument('--find_best_lr', action='store_true', help='Use Trainer to find the best learning')
-#     parser.add_argument('--log_every_n_steps', type=int, help='Log every n steps', default = 20)
-#     parser.add_argument('--image_size', type=int, nargs=2, help='Image size', default=[64, 128])
-#     #parameters for each model
-#     parser.add_argument('--smoothness_weight', type=float, help='Weight for smoothness loss', default=0.05)
-#     parser.add_argument('--second_order_weight', type=float, help='Weight for gradient of image', default=0.0)
-#     parser.add_argument('--reconst_weight', type=float, help='Weight for reconstruction loss', default=2.0)
-#     parser.add_argument('--with_occ', action='store_true', help='Training flownet with ground truth occlusion mask or not')
-#     parser.add_argument('--flow_root', type=str, help='Path to flow model checkpoint', default=None)
-#     parser.add_argument('--supervised_flow', action='store_true', help='Used trained supervised model in TwoStageModel instead of unsupervised one')
-#     parser.add_argument('--inpainting_root', type=str, help='Path to inpainting model checkpoint', default=None)
-#     parser.add_argument('--org', action='store_true', help='Use the original version of the gated convolution')
-
-
-#     args = parser.parse_args()
     pl.seed_everything(42)
     file_name = r'config/unsupervised_config.yml'
     with open(file_name) as f:
@@ -62,10 +36,10 @@ if __name__ == '__main__':
     elif network_type == 'inpainting':
         assert hparams['model'] in ['simple', 'gated']
         if hparams['model'] == 'simple': 
-            hparams['second_order_weight'] = args['second_order_weight']
             hparams['n_display_images'] = args['n_display_images']
             hparams['result_dir'] = result_dir
             hparams['log_image_every_epoch'] = args['log_image_every_epoch']
+            hparams['loss_type'] = args['loss_type']
             model = InpaintingStageModel(hparams=hparams)
         else: 
             hparams['n_display_images'] = args['n_display_images']
