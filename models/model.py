@@ -116,8 +116,9 @@ def img2photo(imgs, rgb = True):
 
 
 class VGGPerceptualLoss(nn.Module):
-    def __init__(self, resize=False):
+    def __init__(self, resize=False, w = [1.0,1.0,1.0,1.0]):
         super(VGGPerceptualLoss, self).__init__()
+        self.w = torch.nn.Parameter(torch.tensor(w))
         blocks = []
         blocks.append(torchvision.models.vgg16(pretrained=True).features[:4].eval())
         blocks.append(torchvision.models.vgg16(pretrained=True).features[4:9].eval())
@@ -135,14 +136,16 @@ class VGGPerceptualLoss(nn.Module):
         if self.resize:
             input = self.transform(input, mode='bilinear', size=(224, 224), align_corners=False)
             target = self.transform(target, mode='bilinear', size=(224, 224), align_corners=False)
-        loss = 0.0
+        losses = []
         x = input
         y = target
         for block in self.blocks:
             x = block(x)
             y = block(y)
-            loss += F.l1_loss(x, y)
-        return loss
+            losses.append(F.l1_loss(x, y))
+        loss = torch.stack(losses)
+        a = (loss*self.w).sum()
+        return (loss*self.w).sum()
 
 
 class FlowStageModel(pl.LightningModule):
@@ -503,9 +506,7 @@ class FlowStageModel(pl.LightningModule):
 
 class InpaintingStageModel(pl.LightningModule):
     """
-    Training with two stages:
-    First stage: optical flow and occlusion map prediction
-    Second stage: inpainting network predicts pixel value for the occluded regions 
+    Networks for training inpainting task. Two options for loss: pixel-wise(l1, l2) or perceptual(VGG) loss 
     """
     def __init__(self, hparams):
         super().__init__()
@@ -520,7 +521,7 @@ class InpaintingStageModel(pl.LightningModule):
         self.loss_type = hparams.get('loss_type', 'vgg')
         assert self.loss_type in ['pixel-wise', 'vgg']
         if self.loss_type == 'vgg': 
-            self.loss_func = VGGPerceptualLoss()
+            self.loss_func = VGGPerceptualLoss(w = [1.0,1.0,1.0,1.0])
         else: 
             self.loss_func = ReconLoss(1.0,1.0,1.0,1.0)
         for param in self.loss_func.parameters():
