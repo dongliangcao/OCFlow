@@ -144,7 +144,7 @@ class VGGPerceptualLoss(nn.Module):
             y = block(y)
             losses.append(F.l1_loss(x, y))
         loss = torch.stack(losses)
-        a = (loss*self.w).sum()
+#         a = (loss*self.w).sum()
         return (loss*self.w).sum()
 
 
