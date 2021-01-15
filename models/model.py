@@ -144,7 +144,6 @@ class VGGPerceptualLoss(nn.Module):
             y = block(y)
             losses.append(F.l1_loss(x, y))
         loss = torch.stack(losses)
-#         a = (loss*self.w).sum()
         return (loss*self.w).sum()
 
 
@@ -518,14 +517,20 @@ class InpaintingStageModel(pl.LightningModule):
         self.n_display_images = hparams.get('n_display_images', 1)
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
+        self.reconst_weight = hparams.get('reconst_weight', 1.0)
         self.loss_type = hparams.get('loss_type', 'vgg')
         assert self.loss_type in ['pixel-wise', 'vgg']
         if self.loss_type == 'vgg': 
-            self.loss_func = VGGPerceptualLoss(w = [1.0,1.0,1.0,1.0])
+            self.loss_func1 = VGGPerceptualLoss(w = [1.0,1.0,1.0,1.0])
+            self.loss_func2 = ReconLoss(1.0,1.0,1.0,1.0)
+            for param in self.loss_func1.parameters():
+                param.requires_grad = False
+            for param in self.loss_func2.parameters():
+                param.requires_grad = False
         else: 
             self.loss_func = ReconLoss(1.0,1.0,1.0,1.0)
-        for param in self.loss_func.parameters():
-            param.requires_grad = False
+            for param in self.loss_func.parameters():
+                param.requires_grad = False
     @property
     def is_cuda(self):
         return next(self.parameters()).is_cuda
@@ -542,16 +547,28 @@ class InpaintingStageModel(pl.LightningModule):
             loss, _, _ = self.loss_func(imgs, recon_imgs, masks)
             return loss
         elif self.loss_type == 'vgg': 
-            loss = self.loss_func(recon_imgs, imgs)
-            return loss 
+            
+            #mean = imgs.new_tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
+            #std = imgs.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
+            #vgg_loss = self.loss_func1(((recon_imgs*0.5+0.5)-mean)/std, ((imgs*0.5+0.5)-mean)/std)
+            vgg_loss = self.loss_func1(recon_imgs, imgs)
+            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks)
+            return vgg_loss, recon_loss 
         else:
             raise ValueError(f'Unsupported loss type: {self.loss_type}')
     
     def training_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx)
+        if self.loss_type =='vgg': 
+            vgg_loss, recon_loss = self.general_step(batch, batch_idx)
+            loss = vgg_loss + self.reconst_weight*recon_loss
+        else: 
+            loss = self.general_step(batch, batch_idx)
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalars("step_loss",{"train_loss": loss}, global_step = self.global_step)
+            if self.loss_type == 'vgg': 
+                tensorboard.add_scalars("vgg_loss",{"train_loss": vgg_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("reconst_loss",{"train_loss": recon_loss}, global_step = self.global_step)
         return loss
     def training_epoch_end(self, outputs): 
         loss = torch.stack([x['loss'] for x in outputs]).mean()
@@ -564,7 +581,13 @@ class InpaintingStageModel(pl.LightningModule):
         if self.loss_type == 'pixel-wise': 
             loss, _, _ = self.loss_func(imgs, recon_imgs, masks)
         elif self.loss_type == 'vgg': 
-            loss = self.loss_func(recon_imgs, imgs)
+            #mean = imgs.new_tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
+            #std = imgs.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
+            #vgg_loss = self.loss_func1(((recon_imgs*0.5+0.5)-mean)/std, ((imgs*0.5+0.5)-mean)/std)
+
+            vgg_loss = self.loss_func1(recon_imgs, imgs)
+            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks)
+            loss = vgg_loss + self.reconst_weight*recon_loss
         else:
             raise ValueError(f'Unsupported loss type: {self.loss_type}')
         complete_imgs = recon_imgs * masks + imgs * (1 - masks)
@@ -572,7 +595,9 @@ class InpaintingStageModel(pl.LightningModule):
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalars("step_loss", {"val_loss": loss}, global_step = self.global_step)
-
+            if self.loss_type == 'vgg': 
+                tensorboard.add_scalars("vgg_loss",{"val_loss": vgg_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("reconst_loss",{"val_loss": recon_loss}, global_step = self.global_step)
             if self.current_epoch % self.log_image_every_epoch == 0: 
 
                 val_save_dir = os.path.join(self.result_dir, "val_{}".format(self.current_epoch))
@@ -607,10 +632,17 @@ class InpaintingStageModel(pl.LightningModule):
         self.log('monitored_loss', avg_loss, prog_bar= True, logger = True)
 
     def test_step(self, batch, batch_idx):
-        loss = self.general_step(batch, batch_idx)
+        if self.loss_type =='vgg': 
+            vgg_loss, recon_loss = self.general_step(batch, batch_idx)
+            loss = vgg_loss + self.reconst_weight*recon_loss
+        else: 
+            loss = self.general_step(batch, batch_idx)
         if batch_idx == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalars("step_loss",{"test_loss": loss}, global_step = self.global_step)
+            if self.loss_type == 'vgg': 
+                tensorboard.add_scalars("vgg_loss",{"test_loss": vgg_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("reconst_loss",{"test_loss": recon_loss}, global_step = self.global_step)
         return loss
 
     def test_epoch_end(self, outputs): 

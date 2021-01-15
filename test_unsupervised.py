@@ -40,6 +40,7 @@ if __name__ == '__main__':
             hparams['result_dir'] = result_dir
             hparams['log_image_every_epoch'] = args['log_image_every_epoch']
             hparams['loss_type'] = args['loss_type']
+            hparams['reconst_weight'] = args['reconst_weight']
             model = InpaintingStageModel(hparams=hparams)
         else: 
             hparams['n_display_images'] = args['n_display_images']
