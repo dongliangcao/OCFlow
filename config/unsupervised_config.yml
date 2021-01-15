@@ -4,7 +4,7 @@ epochs: 5000
 find_best_lr: false
 flow_root: null
 image_size: !!python/tuple
-- 64
+- 96
 - 128
 inpainting_root: /home/tnguyen/OCFlow/tensorboard_logs/default/gated, random , 0.001/checkpoints/epoch=565.ckpt
 learning_rate: 0.001
@@ -13,9 +13,9 @@ model: simple
 network_type: inpainting
 org: false
 overfit: true
-reconst_weight: 0.5
+reconst_weight: 0.1
 root: /home/tnguyen/dataset/FlyingChairs2_onesample/train
-n_display_images: 3
+n_display_images: 1
 log_image_every_epoch: 1
 photo_weight: 1.0
 smooth1_weight: 0.0
@@ -28,4 +28,5 @@ static_occ: false
 occ_aware: true
 occlusion_ratio: 0.3
 result_dir: gan_img_logs
-loss_type: vgg
+loss_type: pixel-wise
+adversarial_loss: true

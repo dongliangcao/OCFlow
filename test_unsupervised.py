@@ -35,19 +35,17 @@ if __name__ == '__main__':
         model = FlowStageModel(hparams=hparams)
     elif network_type == 'inpainting':
         assert hparams['model'] in ['simple', 'gated']
-        if hparams['model'] == 'simple': 
-            hparams['n_display_images'] = args['n_display_images']
-            hparams['result_dir'] = result_dir
-            hparams['log_image_every_epoch'] = args['log_image_every_epoch']
-            hparams['loss_type'] = args['loss_type']
-            hparams['reconst_weight'] = args['reconst_weight']
-            model = InpaintingStageModel(hparams=hparams)
-        else: 
-            hparams['n_display_images'] = args['n_display_images']
-            hparams['result_dir'] = result_dir
-            hparams['log_image_every_epoch'] = args['log_image_every_epoch']
+        hparams['n_display_images'] = args['n_display_images']
+        hparams['result_dir'] = result_dir
+        hparams['log_image_every_epoch'] = args['log_image_every_epoch']
+        hparams['loss_type'] = args['loss_type']
+        hparams['reconst_weight'] = args['reconst_weight']
+        hparams['adversarial_loss'] = args['adversarial_loss']
+        if hparams['adversarial_loss']: 
             model = InpaintingGConvModel(hparams=hparams)
             automatic_optimization = False
+        else: 
+            model = InpaintingStageModel(hparams=hparams)
     else: 
         assert hparams['model'] in ['with_gt_flow', 'no_gt_flow']
         hparams['reconst_weight'] = args['reconst_weight']

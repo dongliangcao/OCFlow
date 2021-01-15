@@ -667,27 +667,50 @@ class InpaintingGConvModel(pl.LightningModule):
         self.lr = hparams.get('learning_rate',1e-4)
         self.decay = hparams.get('decay',0.0)
         self.org = hparams.get('org', False)
-        self.img_size = hparams.get('image_size', (64, 128))
+        self.img_size = hparams.get('img_size')
         self.batch_size = hparams.get('batch_size', 16)
         self.n_display_images = hparams.get('n_display_images', 1)
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
-        
-        if self.org:
-            self.generator = InpaintSANetOrg(img_size=self.img_size)
-            self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
-        else:
-            self.generator = InpaintSANet(img_size=self.img_size)
-            self.discriminator = InpaintSADiscriminator(img_size=self.img_size)
+        #self.reconst_weight = hparams.get('reconst_weight', 1.0)
+        self.loss_type = hparams.get('loss_type', 'vgg')
         self.log_every_n_steps = hparams.get('log_every_n_steps',20)
+        self.model = hparams['model']
+        assert self.model in ['gated', 'simple']
+        if self.model == 'gated': 
+            if self.org:
+                self.generator = InpaintSANetOrg(img_size=self.img_size)
+                
+            else:
+                self.generator = InpaintSANet(img_size=self.img_size)
+                
+        else: 
+            self.generator = InpaintingNet()
         
+        self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
+
+        
+
+        assert self.loss_type in ['pixel-wise', 'vgg']
+        if self.loss_type == 'vgg': 
+            self.loss_func = VGGPerceptualLoss(w = [1.0,1.0,1.0,1.0])
+            for param in self.loss_func.parameters():
+                param.requires_grad = False
+        else: 
+            self.loss_func = ReconLoss(1.0,1.0,1.0,1.0)
+            for param in self.loss_func.parameters():
+                param.requires_grad = False
+
     def forward(self, inputs): 
         return self.generator(inputs)
     def training_step(self, batch, batch_idx, optimizer_idx): 
         _, imgs, masks = batch 
         (optD, optG) = self.optimizers()
         #train discriminator
-        coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        if self.model == 'gated': 
+            coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        else: 
+            recon_imgs = self.generator(imgs,masks)
         complete_imgs = recon_imgs * masks + imgs * (1 - masks)
         pos_imgs = torch.cat([imgs, masks], dim=1)
         neg_imgs = torch.cat([complete_imgs, masks], dim=1)
@@ -703,10 +726,21 @@ class InpaintingGConvModel(pl.LightningModule):
         #train generator 
         pred_neg = self.discriminator(neg_imgs)
         GANLoss = SNGenLoss(1.0)
-        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
-        whole_loss = g_loss + r_loss
+        if self.loss_type == 'vgg': 
+            content_loss = self.loss_func(recon_imgs, imgs)
+            Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
+            if self.model == 'gated': 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks)
+            
+        else: 
+            if self.model == 'gated': 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
+        whole_loss = 1e-3*g_loss + content_loss 
         self.manual_backward(whole_loss, optG)
         optG.step()
         optG.zero_grad()
@@ -714,23 +748,26 @@ class InpaintingGConvModel(pl.LightningModule):
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalars("whole_loss",{"train_loss": whole_loss} , global_step = self.global_step)
-            tensorboard.add_scalars("recon_loss", {"train_loss": r_loss}, global_step = self.global_step)
+            tensorboard.add_scalars("content_loss", {"train_loss": content_loss}, global_step = self.global_step)
             tensorboard.add_scalars("gan_loss", {"train_loss":g_loss}, global_step = self.global_step)
             tensorboard.add_scalars("discriminator_loss",{ "train_loss":d_loss}, global_step = self.global_step)
-        return {'loss': r_loss, 'occluded': r_occluded, 'non_occluded': r_non_occluded}
+        return {'loss': content_loss, 'occluded': r_occluded, 'non_occluded': r_non_occluded}
     def training_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x['occluded'] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x['non_occluded'] for x in outputs]).mean()
-        avg_recon = torch.stack([x['loss'] for x in outputs]).mean()
+        avg_content = torch.stack([x['loss'] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_epoch_loss", {"train_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("recon_epoch_loss", {"train_loss": avg_recon}, global_step = self.current_epoch)
+        tensorboard.add_scalars("content_epoch_loss", {"train_loss": avg_content}, global_step = self.current_epoch)
 
     def validation_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
         #train discriminator
-        coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        if self.model == 'gated': 
+            coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        else: 
+            recon_imgs = self.generator(imgs,masks)
         complete_imgs = recon_imgs * masks + imgs * (1 - masks)
         pos_imgs = torch.cat([imgs, masks], dim=1)
         neg_imgs = torch.cat([complete_imgs, masks], dim=1)
@@ -739,10 +776,24 @@ class InpaintingGConvModel(pl.LightningModule):
         pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
         
         GANLoss = SNGenLoss(1.0)
-        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
-        whole_loss = g_loss + r_loss
+
+        if self.loss_type == 'vgg': 
+            content_loss = self.loss_func(recon_imgs, imgs)
+            Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
+            if self.model == 'gated': 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks)
+            
+        else: 
+            if self.model == 'gated': 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
+        whole_loss = 1e-3*g_loss + content_loss
+
+
        
         Dloss = SNDisLoss()
         d_loss = Dloss(pred_pos, pred_neg)
@@ -751,7 +802,7 @@ class InpaintingGConvModel(pl.LightningModule):
             if self.global_rank == 0:
                 tensorboard = self.logger.experiment
                 tensorboard.add_scalars("whole_loss",{"val_loss": whole_loss} , global_step = self.global_step)
-                tensorboard.add_scalars("recon_loss", {"val_loss": r_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("content_loss", {"val_loss": content_loss}, global_step = self.global_step)
                 tensorboard.add_scalars("gan_loss", {"val_loss":g_loss}, global_step = self.global_step)
                 tensorboard.add_scalars("discriminator_loss",{ "val_loss":d_loss}, global_step = self.global_step)
                 if self.current_epoch % self.log_image_every_epoch == 0: 
@@ -762,13 +813,13 @@ class InpaintingGConvModel(pl.LightningModule):
                         os.makedirs(val_save_real_dir)
                         os.makedirs(val_save_gen_dir)
 
-                    saved_images =img2photo(torch.cat([ imgs * (1 - masks), coarse_imgs, recon_imgs, imgs, complete_imgs], dim=2))
-                    h, w = saved_images.shape[1]//5, saved_images.shape[2]
+                    saved_images =img2photo(torch.cat([ imgs * (1 - masks), recon_imgs, imgs, complete_imgs], dim=2))
+                    h, w = saved_images.shape[1]//4, saved_images.shape[2]
                     j= 0
                     n_display_images = self.n_display_images if self.batch_size > self.n_display_images else self.batch_size
                     for val_img in saved_images:
-                        real_img = val_img[(3*h):(4*h), :,:]
-                        gen_img = val_img[(4*h):,:,:] 
+                        real_img = val_img[(2*h):(3*h), :,:]
+                        gen_img = val_img[(3*h):,:,:] 
                         real_img = Image.fromarray(real_img.astype(np.uint8))
                         gen_img = Image.fromarray(gen_img.astype(np.uint8))
                         real_img.save(os.path.join(val_save_real_dir, "{}.png".format(j)))
@@ -779,16 +830,16 @@ class InpaintingGConvModel(pl.LightningModule):
                     tensorboard = self.logger.experiment
                     tensorboard.add_images('val/imgs', saved_images[:n_display_images].astype(np.uint8), self.current_epoch, dataformats = 'NHWC')
 
-        return (r_occluded, r_non_occluded, r_loss)
+        return (r_occluded, r_non_occluded, content_loss)
     def validation_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
-        avg_recon = torch.stack([x[2] for x in outputs]).mean()
+        avg_content = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("recon_epoch_loss", {"val_loss": avg_recon}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_recon, prog_bar= True, logger = True)
+        tensorboard.add_scalars("content_epoch_loss", {"val_loss": avg_content}, global_step = self.current_epoch)
+        self.log('monitored_loss', avg_content, prog_bar= True, logger = True, sync_dist=True)
 
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
@@ -802,10 +853,22 @@ class InpaintingGConvModel(pl.LightningModule):
         pred_pos, pred_neg = torch.chunk(pred_pos_neg, 2, dim=0)
         
         GANLoss = SNGenLoss(1.0)
-        Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
         g_loss = GANLoss(pred_neg)
-        r_loss, r_occluded, r_non_occluded  = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
-        whole_loss = g_loss + r_loss
+
+        if self.loss_type == 'vgg': 
+            content_loss = self.loss_func(recon_imgs, imgs)
+            Recon_Loss = ReconLoss(1.0,1.0,1.0,1.0)
+            if self.model == 'gated': 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                _, r_occluded, r_non_occluded = Recon_Loss(imgs, recon_imgs, masks)
+            
+        else: 
+            if self.model == 'gated': 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
+            else: 
+                content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
+        whole_loss = 1e-3*g_loss + content_loss
        
         Dloss = SNDisLoss()
         d_loss = Dloss(pred_pos, pred_neg)
@@ -814,18 +877,18 @@ class InpaintingGConvModel(pl.LightningModule):
             if self.global_rank == 0:
                 tensorboard = self.logger.experiment
                 tensorboard.add_scalars("whole_loss",{"test_loss": whole_loss} , global_step = self.global_step)
-                tensorboard.add_scalars("recon_loss", {"test_loss": r_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("content_loss", {"test_loss": content_loss}, global_step = self.global_step)
                 tensorboard.add_scalars("gan_loss", {"test_loss":g_loss}, global_step = self.global_step)
                 tensorboard.add_scalars("discriminator_loss",{ "test_loss":d_loss}, global_step = self.global_step)
-        return  (r_occluded, r_non_occluded, r_loss)
+        return  (r_occluded, r_non_occluded, content_loss)
     def test_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
-        avg_recon = torch.stack([x[2] for x in outputs]).mean()
+        avg_content = torch.stack([x[2] for x in outputs]).mean()
         tensorboard = self.logger.experiment
         tensorboard.add_scalars("occluded_epoch_loss", {"test_loss": avg_occluded}, global_step = self.current_epoch)
         tensorboard.add_scalars("non_occluded_epoch_loss", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("recon_epoch_loss", {"test_loss": avg_recon}, global_step = self.current_epoch)
+        tensorboard.add_scalars("content_epoch_loss", {"test_loss": avg_content}, global_step = self.current_epoch)
     def configure_optimizers(self): 
         optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
         optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
