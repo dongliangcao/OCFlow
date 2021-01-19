@@ -511,14 +511,24 @@ class InpaintingStageModel(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.lr = hparams.get('learning_rate',1e-4)
-        self.generator = InpaintingNet()
         self.log_every_n_steps = hparams.get('log_every_n_steps', 20)
+        self.img_size = hparams.get('img_size')
         self.batch_size = hparams.get('batch_size', 16)
         self.n_display_images = hparams.get('n_display_images', 1)
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
         self.reconst_weight = hparams.get('reconst_weight', 1.0)
         self.loss_type = hparams.get('loss_type', 'vgg')
+        self.org = hparams.get('org', False)
+        self.model = hparams.get('model', 'simple')
+        assert self.model in ['simple', 'gated']
+        if self.model == 'simple': 
+            self.generator = InpaintingNet()
+        else: 
+            if self.org: 
+                self.generator = InpaintSANetOrg(img_size=self.img_size)
+            else: 
+                self.generator = InpaintSANet(img_size=self.img_size)
         assert self.loss_type in ['pixel-wise', 'vgg']
         if self.loss_type == 'vgg': 
             self.loss_func1 = VGGPerceptualLoss(w = [1.0,1.0,1.0,1.0])
@@ -542,9 +552,14 @@ class InpaintingStageModel(pl.LightningModule):
     def general_step(self, batch, batch_idx):
         _, imgs, masks = batch
         # inpainting
-        recon_imgs = self.generator(imgs, masks)
+        if self.model == 'gated': 
+            coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        else: 
+            recon_imgs = self.generator(imgs,masks)
+            coarse_imgs = None
+
         if self.loss_type == 'pixel-wise': 
-            loss, _, _ = self.loss_func(imgs, recon_imgs, masks)
+            loss, _, _ = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             return loss
         elif self.loss_type == 'vgg': 
             
@@ -552,7 +567,7 @@ class InpaintingStageModel(pl.LightningModule):
             #std = imgs.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
             #vgg_loss = self.loss_func1(((recon_imgs*0.5+0.5)-mean)/std, ((imgs*0.5+0.5)-mean)/std)
             vgg_loss = self.loss_func1(recon_imgs, imgs)
-            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks)
+            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks, coarse_imgs)
             return vgg_loss, recon_loss 
         else:
             raise ValueError(f'Unsupported loss type: {self.loss_type}')
@@ -577,16 +592,21 @@ class InpaintingStageModel(pl.LightningModule):
     
     def validation_step(self, batch, batch_idx):
         _, imgs, masks = batch
-        recon_imgs = self.generator(imgs, masks)
+        if self.model == 'gated': 
+            coarse_imgs, recon_imgs = self.generator(imgs,masks)
+        else: 
+            recon_imgs = self.generator(imgs,masks)
+            coarse_imgs = None
+
         if self.loss_type == 'pixel-wise': 
-            loss, _, _ = self.loss_func(imgs, recon_imgs, masks)
+            loss, _, _ = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
         elif self.loss_type == 'vgg': 
             #mean = imgs.new_tensor([0.485, 0.456, 0.406]).view(-1, 1, 1)
             #std = imgs.new_tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
             #vgg_loss = self.loss_func1(((recon_imgs*0.5+0.5)-mean)/std, ((imgs*0.5+0.5)-mean)/std)
 
             vgg_loss = self.loss_func1(recon_imgs, imgs)
-            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks)
+            recon_loss, _, _ = self.loss_func2(imgs, recon_imgs, masks, coarse_imgs)
             loss = vgg_loss + self.reconst_weight*recon_loss
         else:
             raise ValueError(f'Unsupported loss type: {self.loss_type}')
@@ -652,13 +672,13 @@ class InpaintingStageModel(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = Adam(self.parameters(), self.lr)
+#        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20, verbose = True)
         return optimizer
-#         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.2, patience=20)
-#         return {
+#        return {
 #             'optimizer': optimizer,
 #             'lr_scheduler': scheduler,
-#             'monitor': 'val_reconst'
-#         }
+#             'monitor': 'monitored_loss'
+#        }
 
 class InpaintingGConvModel(pl.LightningModule): 
     def __init__(self, hparams): 
@@ -686,9 +706,10 @@ class InpaintingGConvModel(pl.LightningModule):
                 
         else: 
             self.generator = InpaintingNet()
-        
-        self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
-
+        if self.org: 
+            self.discriminator = InpaintSADiscriminatorOrg(img_size=self.img_size)
+        else: 
+            self.discriminator = InpaintSADiscriminator(img_size=self.img_size)
         
 
         assert self.loss_type in ['pixel-wise', 'vgg']
@@ -745,21 +766,23 @@ class InpaintingGConvModel(pl.LightningModule):
         optG.step()
         optG.zero_grad()
         optD.zero_grad()
-        if self.global_step % self.log_every_n_steps == 0: 
-            tensorboard = self.logger.experiment
-            tensorboard.add_scalars("whole_loss",{"train_loss": whole_loss} , global_step = self.global_step)
-            tensorboard.add_scalars("content_loss", {"train_loss": content_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("gan_loss", {"train_loss":g_loss}, global_step = self.global_step)
-            tensorboard.add_scalars("discriminator_loss",{ "train_loss":d_loss}, global_step = self.global_step)
+        if self.global_step % self.log_every_n_steps == 0:
+            if self.global_rank == 0: 
+                tensorboard = self.logger.experiment
+                tensorboard.add_scalars("whole_loss",{"train_loss": whole_loss} , global_step = self.global_step)
+                tensorboard.add_scalars("content_loss", {"train_loss": content_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("gan_loss", {"train_loss":g_loss}, global_step = self.global_step)
+                tensorboard.add_scalars("discriminator_loss",{ "train_loss":d_loss}, global_step = self.global_step)
         return {'loss': content_loss, 'occluded': r_occluded, 'non_occluded': r_non_occluded}
     def training_epoch_end(self, outputs): 
         avg_occluded = torch.stack([x['occluded'] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x['non_occluded'] for x in outputs]).mean()
         avg_content = torch.stack([x['loss'] for x in outputs]).mean()
-        tensorboard = self.logger.experiment
-        tensorboard.add_scalars("occluded_epoch_loss", {"train_loss": avg_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("non_occluded_epoch_loss", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("content_epoch_loss", {"train_loss": avg_content}, global_step = self.current_epoch)
+        if self.global_rank == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalars("occluded_epoch_loss", {"train_loss": avg_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("non_occluded_epoch_loss", {"train_loss": avg_non_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("content_epoch_loss", {"train_loss": avg_content}, global_step = self.current_epoch)
 
     def validation_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
@@ -835,11 +858,12 @@ class InpaintingGConvModel(pl.LightningModule):
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
         avg_content = torch.stack([x[2] for x in outputs]).mean()
-        tensorboard = self.logger.experiment
-        tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("content_epoch_loss", {"val_loss": avg_content}, global_step = self.current_epoch)
-        self.log('monitored_loss', avg_content, prog_bar= True, logger = True, sync_dist=True)
+        if self.global_rank == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalars("occluded_epoch_loss", {"val_loss": avg_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("non_occluded_epoch_loss", {"val_loss": avg_non_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("content_epoch_loss", {"val_loss": avg_content}, global_step = self.current_epoch)
+            self.log('monitored_loss', avg_content, prog_bar= True, logger = True, sync_dist=True)
 
     def test_step(self, batch, batch_idx): 
         _, imgs, masks = batch 
@@ -885,10 +909,11 @@ class InpaintingGConvModel(pl.LightningModule):
         avg_occluded = torch.stack([x[0] for x in outputs]).mean()
         avg_non_occluded = torch.stack([x[1] for x in outputs]).mean()
         avg_content = torch.stack([x[2] for x in outputs]).mean()
-        tensorboard = self.logger.experiment
-        tensorboard.add_scalars("occluded_epoch_loss", {"test_loss": avg_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("non_occluded_epoch_loss", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
-        tensorboard.add_scalars("content_epoch_loss", {"test_loss": avg_content}, global_step = self.current_epoch)
+        if self.global_rank == 0:
+            tensorboard = self.logger.experiment
+            tensorboard.add_scalars("occluded_epoch_loss", {"test_loss": avg_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("non_occluded_epoch_loss", {"test_loss": avg_non_occluded}, global_step = self.current_epoch)
+            tensorboard.add_scalars("content_epoch_loss", {"test_loss": avg_content}, global_step = self.current_epoch)
     def configure_optimizers(self): 
         optG = torch.optim.Adam(self.generator.parameters(), lr=self.lr, weight_decay=self.decay)
         optD = torch.optim.Adam(self.discriminator.parameters(), lr=4*self.lr, weight_decay=self.decay)
