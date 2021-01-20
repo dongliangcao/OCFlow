@@ -42,8 +42,8 @@ from torchvision import transforms
 _transforms_fun=transforms.Compose([transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])])
 
 
-def get_activations(images, model, batch_size=64, dims=2048,
-                    cuda=False, verbose=False):
+def get_activations(images, model, batch_size=32, dims=2048,
+                    cuda=True, verbose=False):
     """Calculates the activations of the pool_3 layer for all images.
     Params:
     -- images      : Numpy array of dimension (n_images, 3, hi, wi). The values
@@ -63,11 +63,11 @@ def get_activations(images, model, batch_size=64, dims=2048,
     """
     model.eval()
     if cuda:
-        dtype = torch.cuda.FloatTensor
+        device = 'cuda'
     else:
         if torch.cuda.is_available():
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
-        dtype = torch.FloatTensor
+        device = 'cpu'
     #print(dtype)
     d0 = images.shape[0]
     if batch_size > d0:
@@ -76,9 +76,9 @@ def get_activations(images, model, batch_size=64, dims=2048,
         batch_size = d0
 
     n_batches = d0 // batch_size
-    n_used_imgs = n_batches * batch_size
+    last_batch = d0 % batch_size
 
-    pred_arr = np.empty((n_used_imgs, dims))
+    pred_arr = np.empty((d0, dims))
     for i in range(n_batches):
         if verbose:
             print('\rPropagating batch %d/%d' % (i + 1, n_batches),
@@ -86,8 +86,8 @@ def get_activations(images, model, batch_size=64, dims=2048,
         start = i * batch_size
         end = start + batch_size
 
-        batch = images[start:end].type(dtype)#torch.from_numpy(images[start:end]).type(torch.FloatTensor)
-        batch = Variable(batch)
+        batch = images[start:end].to(device)#torch.from_numpy(images[start:end]).type(torch.FloatTensor)
+        # batch = Variable(batch)
         # if cuda:
         #     batch = batch.cuda()
         #print(batch.size(), batch)
@@ -103,6 +103,17 @@ def get_activations(images, model, batch_size=64, dims=2048,
         pred_arr[start:end] = pred.cpu().data.numpy().reshape(batch_size, -1)
         #print(pred.size())
 
+    if last_batch != 0:
+        start = n_batches * batch_size
+        batch = images[start:].to(device)
+        with torch.no_grad():
+            pred = model(batch)[0]
+        
+        if pred.shape[2] != 1 or pred.shape[3] != 1:
+            pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+            
+        pred_arr[start:] = pred.cpu().data.numpy().reshape(last_batch, -1)
+    
     if verbose:
         print(' done')
 
@@ -163,8 +174,8 @@ def calculate_frechet_distance(mu1, sigma1, mu2, sigma2, eps=1e-6):
             np.trace(sigma2) - 2 * tr_covmean)
 
 
-def calculate_activation_statistics(images, model, batch_size=64,
-                                    dims=2048, cuda=False, verbose=False):
+def calculate_activation_statistics(images, model, batch_size=32,
+                                    dims=2048, cuda=True, verbose=False):
     """Calculation of the statistics used by the FID.
     Params:
     -- images      : Numpy array of dimension (n_images, 3, hi, wi). The values
@@ -190,38 +201,40 @@ def calculate_activation_statistics(images, model, batch_size=64,
     mu = np.mean(act, axis=0)
     #print(mu.shape, [i for i in mu if i == 0])
 
-    sigma = np.cov(act, rowvar=0, ddof=1)
+    sigma = np.cov(act, rowvar=False)
     #print(sigma.shape)
     #print("cal activation stat done")
     return mu, sigma
 
 
-def _compute_statistics_of_imgs(imgs, model, batch_size, dims, cuda):
-    imgs = _transforms_fun(imgs*0.5+0.5)
-    m, s = calculate_activation_statistics(imgs, model, batch_size,
-                                               dims, cuda)
-    return m, s
+# def compute_statistics_of_imgs(imgs, model, batch_size, dims, cuda):
+#     # our image is already in range (-1, 1)
+#     # imgs = _transforms_fun(imgs*0.5+0.5)
+
+#     m, s = calculate_activation_statistics(imgs, model, batch_size,
+#                                                dims, cuda)
+#     return m, s
 
 
-def calculate_fid_given_imgs(imgs, complete_imgs, batch_size, cuda, dims):
+def calculate_fid_given_imgs(imgs, complete_imgs, batch_size, cuda=True, dims=2048):
     """Calculates the FID of real images and generated images"""
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
 
     if cuda:
-        dtype = torch.cuda.FloatTensor
+        device = 'cuda'
     else:
         if torch.cuda.is_available():
             print("WARNING: You have a CUDA device, so you should probably set cuda=True")
-        dtype = torch.FloatTensor
+        device = 'cpu'
 
-    inception_model = InceptionV3([block_idx]).type(dtype)
+    inception_model = InceptionV3([block_idx]).to(device)
 
-    m1, s1 = _compute_statistics_of_imgs(imgs, inception_model, batch_size,
+    m1, s1 = calculate_activation_statistics(imgs, inception_model, batch_size,
                                          dims, cuda)
-    print("1 done")
-    m2, s2 = _compute_statistics_of_imgs(complete_imgs, inception_model, batch_size,
+    # print("1 done")
+    m2, s2 = calculate_activation_statistics(complete_imgs, inception_model, batch_size,
                                          dims, cuda)
-    print("2 done")
+    # print("2 done")
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
 
     return fid_value
