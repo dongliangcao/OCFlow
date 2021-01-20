@@ -1,7 +1,8 @@
 from .ssim.ssim import ssim
 from .psnr.psnr import psnr
+from .fid.fid import calculate_fid_given_imgs
 import torch
-def calculate_ssim(model, dataloader, device, type = 'gated'):
+def calculate_ssim(model, dataloader, device, type = 'simple'):
     print(device)
     model.to(device)
     model.eval()
@@ -23,6 +24,35 @@ def calculate_ssim(model, dataloader, device, type = 'gated'):
             total = total + batch_size
     model.to('cpu')
     return (ssim_score/total).cpu().item()
+
+def calculate_fid(model, dataloader, device, type ='simple'): 
+    print(device)
+    model.to(device)
+    model.eval()
+    assert type in ['gated', 'simple'], 'Unknown network type'
+
+    with torch.no_grad(): 
+        list_imgs = []
+        list_complete_imgs = []
+        for batch in dataloader: 
+            _, imgs, masks = batch
+            imgs = imgs.to(device)
+            masks = masks.to(device)
+            batch_size = imgs.size(0) 
+            if type =='gated': 
+                coarse_imgs, recon_imgs = model(imgs,masks)
+            else: 
+                recon_imgs = model(imgs, masks)
+            complete_imgs = recon_imgs * masks + imgs * (1 - masks)
+
+            list_imgs.append(imgs)
+            list_complete_imgs.append(complete_imgs)
+    
+    imgs = torch.cat(list_imgs, dim = 0).to('cpu') # size [B,3,H,W]
+    complete_imgs = torch.cat(list_complete_imgs, dim = 0).to('cpu') #size [B,3,H,W]
+    fid_value = calculate_fid_given_imgs(imgs, complete_imgs, 32,cuda = False if device == 'cpu' else True,dims = 2048)
+    model.to('cpu')
+    return fid_value
 def calculate_psnr(model, dataloader): 
     psnr_value = 0
     num = 0

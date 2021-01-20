@@ -29,7 +29,6 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 import torch
 import numpy as np
-from scipy.misc import imread
 from scipy import linalg
 from torch.autograd import Variable
 from torch.nn.functional import adaptive_avg_pool2d
@@ -40,7 +39,7 @@ from .inception import InceptionV3
 from torchvision import transforms
 #from torchvision.models.inception import inception_v3
 #
-_transforms_fun=transforms.Compose([transforms.Resize((299,299)), transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])])
+_transforms_fun=transforms.Compose([transforms.Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])])
 
 
 def get_activations(images, model, batch_size=64, dims=2048,
@@ -197,36 +196,15 @@ def calculate_activation_statistics(images, model, batch_size=64,
     return mu, sigma
 
 
-def _compute_statistics_of_path(path, model, batch_size, dims, cuda):
-    if path.endswith('.npz'):
-        f = np.load(path)
-        m, s = f['mu'][:], f['sigma'][:]
-        f.close()
-    else:
-        path = pathlib.Path(path)
-        files = list(path.glob('*.jpg')) + list(path.glob('*.png'))
-        #print(files)
-        imgs = [_transforms_fun(Image.open(fn).convert("RGB")) for fn in files]
-
-        imgs = torch.stack(imgs)
-        # Bring images to shape (B, 3, H, W)
-        #imgs = imgs.transpose((0, 3, 1, 2))
-
-        # Rescale images to be between 0 and 1
-        #imgs /= 255
-
-        m, s = calculate_activation_statistics(imgs, model, batch_size,
+def _compute_statistics_of_imgs(imgs, model, batch_size, dims, cuda):
+    imgs = _transforms_fun(imgs*0.5+0.5)
+    m, s = calculate_activation_statistics(imgs, model, batch_size,
                                                dims, cuda)
-
     return m, s
 
 
-def calculate_fid_given_paths(paths, batch_size, cuda, dims):
-    """Calculates the FID of two paths"""
-    for p in paths:
-        if not os.path.exists(p):
-            raise RuntimeError('Invalid path: %s' % p)
-
+def calculate_fid_given_imgs(imgs, complete_imgs, batch_size, cuda, dims):
+    """Calculates the FID of real images and generated images"""
     block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
 
     if cuda:
@@ -238,10 +216,10 @@ def calculate_fid_given_paths(paths, batch_size, cuda, dims):
 
     inception_model = InceptionV3([block_idx]).type(dtype)
 
-    m1, s1 = _compute_statistics_of_path(paths[0], inception_model, batch_size,
+    m1, s1 = _compute_statistics_of_imgs(imgs, inception_model, batch_size,
                                          dims, cuda)
     print("1 done")
-    m2, s2 = _compute_statistics_of_path(paths[1], inception_model, batch_size,
+    m2, s2 = _compute_statistics_of_imgs(complete_imgs, inception_model, batch_size,
                                          dims, cuda)
     print("2 done")
     fid_value = calculate_frechet_distance(m1, s1, m2, s2)
