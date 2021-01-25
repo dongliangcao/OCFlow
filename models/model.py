@@ -761,7 +761,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss 
+        whole_loss = g_loss + content_loss 
         self.manual_backward(whole_loss, optG)
         optG.step()
         optG.zero_grad()
@@ -814,7 +814,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss
+        whole_loss = g_loss + content_loss
 
 
        
@@ -892,7 +892,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss
+        whole_loss = g_loss + content_loss
        
         Dloss = SNDisLoss()
         d_loss = Dloss(pred_pos, pred_neg)
