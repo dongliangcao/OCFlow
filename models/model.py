@@ -1118,22 +1118,8 @@ class TwoStageModelGC(pl.LightningModule):
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
         print('result dir inside inpainting model is {}'.format(self.result_dir))
-
-        if self.inpainting_stage == 'simple': 
-            if inpainting_root:
-                self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
-            else:     
-                self.inpainting = InpaintingNet()
-        elif self.inpainting_stage == 'gated': 
-            if inpainting_root:
-                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
-            else: 
-                self.inpainting = InpaintSANet(img_size=self.img_size)
-        else: 
-            if inpainting_root: 
-                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
-            else: 
-                self.inpainting = InpaintSANetOrg(img_size=self.img_size)
+        
+        self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).generator
         
         
         
