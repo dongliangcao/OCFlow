@@ -1193,11 +1193,14 @@ class TwoStageModelGC(pl.LightningModule):
         else:
             raise ValueError('Not supported dataset')
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
+        # warp image use ground truth optical flow
+        img_warped = self.warp(img2, flow)
+        # concatenate the img1 and the warped image as the input for occlusion prediction
+        imgs = torch.cat((img1, img_warped), dim=1)
         # occlusion prediction
         occ_pred_soft = self.occ_pred(imgs)
         occ_pred = (torch.where(occ_pred_soft > 0.5, 1.0, 0.0) - occ_pred_soft).detach() + occ_pred_soft
-        # warp image use ground truth optical flow
-        img_warped = self.warp(img2, flow)
+        
         # get completed image
         if self.inpainting_stage =='simple': 
             img_completed = self.inpainting(img_warped, occ_pred)
