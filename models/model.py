@@ -761,7 +761,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss 
+        whole_loss = g_loss + content_loss 
         self.manual_backward(whole_loss, optG)
         optG.step()
         optG.zero_grad()
@@ -814,7 +814,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss
+        whole_loss = g_loss + content_loss
 
 
        
@@ -892,7 +892,7 @@ class InpaintingGConvModel(pl.LightningModule):
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks, coarse_imgs)
             else: 
                 content_loss, r_occluded, r_non_occluded = self.loss_func(imgs, recon_imgs, masks)
-        whole_loss = 1e-3*g_loss + content_loss
+        whole_loss = g_loss + content_loss
        
         Dloss = SNDisLoss()
         d_loss = Dloss(pred_pos, pred_neg)
@@ -1118,22 +1118,8 @@ class TwoStageModelGC(pl.LightningModule):
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
         print('result dir inside inpainting model is {}'.format(self.result_dir))
-
-        if self.inpainting_stage == 'simple': 
-            if inpainting_root:
-                self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).model
-            else:     
-                self.inpainting = InpaintingNet()
-        elif self.inpainting_stage == 'gated': 
-            if inpainting_root:
-                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
-            else: 
-                self.inpainting = InpaintSANet(img_size=self.img_size)
-        else: 
-            if inpainting_root: 
-                self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
-            else: 
-                self.inpainting = InpaintSANetOrg(img_size=self.img_size)
+        
+        self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).generator
         
         
         
