@@ -18,6 +18,7 @@ if __name__ == '__main__':
     result_dir = '{}/{}'.format(args['result_dir'], time_stamp)
     print('result directory is {}'.format(result_dir))
     image_size = args.get('image_size', None)
+    check_val_every_n_epoch = args.get('check_val_every_n_epoch', 100)
     hparams = dict(network_type = args['network_type'], model=args['model'], epochs = args['epochs'], batch_size=args['batch_size'], learning_rate=args['learning_rate'], log_every_n_steps = args['log_every_n_steps'], img_size=image_size, org=args['org'])
 
     network_type = args['network_type']
@@ -49,6 +50,7 @@ if __name__ == '__main__':
     else: 
         assert hparams['model'] in ['with_gt_flow', 'no_gt_flow']
         hparams['reconst_weight'] = args['reconst_weight']
+        hparams['photo_weight'] = args['photo_weight']
         hparams['inpainting_root'] = args['inpainting_root']
         hparams['smooth1_weight'] = args['smooth1_weight']
         hparams['smooth2_weight'] = args['smooth2_weight']
@@ -92,10 +94,10 @@ if __name__ == '__main__':
     #specify Trainer and start training
     if not args['find_best_lr']: 
         #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
+        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization, check_val_every_n_epoch= check_val_every_n_epoch)
         trainer.fit(model, datamodule=data_module)
     else: 
-        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization)
+        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization, check_val_every_n_epoch = check_val_every_n_epoch)
         #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         lr_finder = trainer.tuner.lr_find(model, datamodule=data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()

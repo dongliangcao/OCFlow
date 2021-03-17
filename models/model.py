@@ -1115,6 +1115,7 @@ class TwoStageModelGC(pl.LightningModule):
 
         self.smooth1_weight = hparams.get('smooth1_weight', 1.0)
         self.smooth2_weight = hparams.get('smooth2_weight', 0.0)
+        self.photo_weight = hparams.get('photo_weight', 0.0)
         
         self.batch_size = hparams.get('batch_size', 16)
         self.n_display_images = hparams.get('n_display_images', 1)
@@ -1223,7 +1224,7 @@ class TwoStageModelGC(pl.LightningModule):
             photo_error, reconst_error, smoothness_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
         else:
             photo_error, reconst_error, smoothness_loss, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3], losses[4]
-        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
+        loss = self.photo_weight * photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("train_photometric", photo_error, global_step = self.global_step)
@@ -1284,7 +1285,7 @@ class TwoStageModelGC(pl.LightningModule):
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred_soft, occ)
-        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
+        loss = self.photo_weight * photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
 
         if batch_idx == 0:
             if self.global_rank == 0:
@@ -1336,7 +1337,7 @@ class TwoStageModelGC(pl.LightningModule):
             photo_error, reconst_error, smoothness_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
         else:
             photo_error, reconst_error, smoothness_loss, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3], losses[4]
-        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
+        loss = self.photo_weight * photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
         if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_photometric", photo_error, global_step = self.global_step)
