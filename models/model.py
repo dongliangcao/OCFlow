@@ -1113,13 +1113,16 @@ class TwoStageModelGC(pl.LightningModule):
         inpainting_root = hparams.get('inpainting_root', None)
         self.inpainting_stage = hparams.get('inpainting_stage', 'gated')
 
+        self.smooth1_weight = hparams.get('smooth1_weight', 1.0)
+        self.smooth2_weight = hparams.get('smooth2_weight', 0.0)
+        
         self.batch_size = hparams.get('batch_size', 16)
         self.n_display_images = hparams.get('n_display_images', 1)
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
         print('result dir inside inpainting model is {}'.format(self.result_dir))
         
-        self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).generator
+        self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
         
         
         
@@ -1181,48 +1184,60 @@ class TwoStageModelGC(pl.LightningModule):
         img1, img2 = imgs[:, 0:3, :, :], imgs[:, 3:6, :, :]
         # warp image use ground truth optical flow
         img_warped = self.warp(img2, flow)
-        # concatenate the img1 and the warped image as the input for occlusion prediction
-        imgs = torch.cat((img1, img_warped), dim=1)
         # occlusion prediction
         occ_pred_soft = self.occ_pred(imgs)
         occ_pred = (torch.where(occ_pred_soft > 0.5, 1.0, 0.0) - occ_pred_soft).detach() + occ_pred_soft
         
+        #add smoothness loss to occlusion map 
+        smoothness_loss = first_order_smoothness_loss(img_warped, occ_pred_soft)
         # get completed image
         if self.inpainting_stage =='simple': 
-            img_completed = self.inpainting(img_warped, occ_pred)
+            img_completed = self.inpainting(img_warped, occ_pred_soft)
         elif self.inpainting_stage =='gated' or self.inpainting_stage == 'gated_org': 
-            _,img_completed = self.inpainting(img_warped, occ_pred)
+            _,img_completed = self.inpainting(img_warped, occ_pred_soft)
         
         # calculate the reconstruction error
         #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         #reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        photo_error = photometric_error(img_warped * (1 - occ_pred), img1 * (1 - occ_pred))
-        photo_error_occluded = photometric_error(img_warped * occ_pred, img1 *occ_pred)
-        reconst_error = photometric_error(img_completed * occ_pred, img1 * occ_pred)
+        photo_error = photometric_error(img_warped * (1 - occ_pred_soft), img1 * (1 - occ_pred_soft))
+        photo_error_occluded = photometric_error(img_warped * occ_pred_soft, img1 *occ_pred_soft)
+        #reconst_error = photometric_error(img_completed * occ_pred_soft, img1 * occ_pred_soft)
+
+        #----------------------------------------------------------------------------------
+        reconstructed_img = occ_pred_soft*img_completed + (1-occ_pred_soft)*img1
+        reconst_error = photometric_error(occ_pred_soft*reconstructed_img, occ_pred_soft*img1)
+        #----------------------------------------------------------------------------------
+
+
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred_soft, occ)
-            return photo_error, reconst_error, bce_loss, photo_error_occluded
-        return photo_error, reconst_error, photo_error_occluded
+            return photo_error, reconst_error, smoothness_loss, bce_loss, photo_error_occluded
+        return photo_error, reconst_error, smoothness_loss, photo_error_occluded
     
     
     def training_step(self, batch, batch_idx):
         losses = self.general_step(batch, batch_idx, 'train')
         bce_loss = None
         if len(losses) == 3:
-            photo_error, reconst_error, photo_error_occluded = losses[0], losses[1], losses[2]
+            photo_error, reconst_error, smoothness_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
         else:
-            photo_error, reconst_error, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
-        loss = photo_error + self.reconst_weight * reconst_error
+            photo_error, reconst_error, smoothness_loss, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3], losses[4]
+        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
         if self.global_step % self.log_every_n_steps == 0: 
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("train_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("train_photometric_occluded", photo_error_occluded, global_step = self.global_step)
             tensorboard.add_scalar("train_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("train_smoothness", smoothness_loss, global_step = self.global_step)
             if bce_loss is not None:
                 tensorboard.add_scalar("train_bce_loss", bce_loss, global_step = self.global_step)
         return loss
-
+    def on_after_backward(self):
+        # example to inspect gradient information in tensorboard
+        if self.global_step % self.log_every_n_steps == 0:  # don't make the tf file huge
+            for tag, param in self.occ_pred.named_parameters():
+                self.logger.experiment.add_histogram( tag, param.grad, global_step=self.global_step)
     def training_epoch_end(self, outputs): 
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         tensorboard = self.logger.experiment
@@ -1250,20 +1265,26 @@ class TwoStageModelGC(pl.LightningModule):
         masked_imgs =  img_warped * (1 - occ_pred)
         # get completed image
         if self.inpainting_stage =='simple': 
-            img_completed = self.inpainting(img_warped, occ_pred)
+            img_completed = self.inpainting(img_warped, occ_pred_soft)
         elif self.inpainting_stage =='gated' or self.inpainting_stage == 'gated_org': 
-            _,img_completed = self.inpainting(img_warped, occ_pred)
+            _,img_completed = self.inpainting(img_warped, occ_pred_soft)
         
         # calculate the reconstruction error
         #photometric_error = charbonnier_loss((img_warped - img1) * (1 - occ_pred), reduction=False).sum() / (3*(1 - occ_pred).sum() + 1e-16)
         #reconst_error = charbonnier_loss(torch.abs(img1 - img_completed) * occ_pred, reduction=False).sum() / (3*occ_pred.sum() + 1e-16)
-        photo_error = photometric_error(img_warped * (1 - occ_pred), img1 * (1 - occ_pred))
-        photo_error_occluded = photometric_error(img_warped * occ_pred, img1 *occ_pred)
-        reconst_error = photometric_error(img_completed * occ_pred, img1 * occ_pred)
+        photo_error = photometric_error(img_warped * (1 - occ_pred_soft), img1 * (1 - occ_pred_soft))
+        photo_error_occluded = photometric_error(img_warped * occ_pred_soft, img1 *occ_pred_soft)
+        
+        #add smoothness loss to occlusion map 
+        smoothness_loss = first_order_smoothness_loss(img_warped, occ_pred_soft)
+
+        #reconst_error = photometric_error(img_completed * occ_pred, img1 * occ_pred)
+        reconstructed_img = occ_pred_soft*img_completed + (1-occ_pred_soft)*img1
+        reconst_error = photometric_error(occ_pred_soft*reconstructed_img, occ_pred_soft*img1)
         # calculate BCE error if occ is available
         if occ is not None:
             bce_loss = F.binary_cross_entropy(occ_pred_soft, occ)
-        loss = photo_error + self.reconst_weight * reconst_error
+        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
 
         if batch_idx == 0:
             if self.global_rank == 0:
@@ -1271,6 +1292,7 @@ class TwoStageModelGC(pl.LightningModule):
                 tensorboard.add_scalar("val_photometric", photo_error, global_step = self.global_step)
                 tensorboard.add_scalar("val_photometric_occluded", photo_error_occluded, global_step = self.global_step)
                 tensorboard.add_scalar("val_reconst", reconst_error, global_step = self.global_step)
+                tensorboard.add_scalar("val_smoothness", smoothness_loss, global_step = self.global_step)
                 if bce_loss is not None:
                     tensorboard.add_scalar("val_bce_loss", bce_loss, global_step = self.global_step)
                 if self.current_epoch % self.log_image_every_epoch == 0: 
@@ -1311,15 +1333,16 @@ class TwoStageModelGC(pl.LightningModule):
         losses = self.general_step(batch, batch_idx, 'test')
         bce_loss = None
         if len(losses) == 3:
-            photo_error, reconst_error, photo_error_occluded = losses[0], losses[1], losses[2]
+            photo_error, reconst_error, smoothness_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
         else:
-            photo_error, reconst_error, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3]
-        loss = photo_error + self.reconst_weight * reconst_error
+            photo_error, reconst_error, smoothness_loss, bce_loss, photo_error_occluded = losses[0], losses[1], losses[2], losses[3], losses[4]
+        loss = photo_error + self.reconst_weight * reconst_error + self.smooth1_weight * smoothness_loss
         if batch_idx == 0:
             tensorboard = self.logger.experiment
             tensorboard.add_scalar("test_photometric", photo_error, global_step = self.global_step)
             tensorboard.add_scalar("test_photometric_occluded", photo_error_occluded, global_step = self.global_step)
             tensorboard.add_scalar("test_reconst", reconst_error, global_step = self.global_step)
+            tensorboard.add_scalar("test_smoothness", smoothness_loss, global_step = self.global_step)
             if bce_loss is not None:
                 tensorboard.add_scalar("test_bce_loss", bce_loss, global_step = self.global_step)
         return loss

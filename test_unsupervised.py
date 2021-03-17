@@ -50,6 +50,8 @@ if __name__ == '__main__':
         assert hparams['model'] in ['with_gt_flow', 'no_gt_flow']
         hparams['reconst_weight'] = args['reconst_weight']
         hparams['inpainting_root'] = args['inpainting_root']
+        hparams['smooth1_weight'] = args['smooth1_weight']
+        hparams['smooth2_weight'] = args['smooth2_weight']
         if hparams['model'] == 'no_gt_flow': 
             hparams['smoothness_weight'] = args['smoothness_weight']
             hparams['flow_root'] = args['flow_root']
