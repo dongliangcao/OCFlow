@@ -54,6 +54,8 @@ if __name__ == '__main__':
         hparams['inpainting_root'] = args['inpainting_root']
         hparams['smooth1_weight'] = args['smooth1_weight']
         hparams['smooth2_weight'] = args['smooth2_weight']
+        hparams['loss_type'] = args['loss_type']
+        hparams['pixelwise_weight'] = args['pixelwise_weight']
         if hparams['model'] == 'no_gt_flow': 
             hparams['smoothness_weight'] = args['smoothness_weight']
             hparams['flow_root'] = args['flow_root']
