@@ -6,16 +6,17 @@ flow_root: null
 image_size: !!python/tuple
 - 96
 - 128
-inpainting_root: /home/tnguyen/OCFlow/tensorboard_inpainting_logs/gated, adver-l1, ratio 1:1, continue/checkpoints/epoch=353-step=196823.ckpt
-learning_rate: 0.000005
+inpainting_root: /home/tnguyen/OCFlow/tensorboard_inpainting_logs/gated, vgg/checkpoints/epoch=301-step=167356.ckpt
+using_pretrained_inpainting: true
+learning_rate: 0.00001
 log_every_n_steps: 15
 check_val_every_n_epoch: 1
 model: with_gt_flow
 network_type: twostage
 org: false
-overfit: false
+overfit: false 
 reconst_weight: 1.0
-pixelwise_weight: 5.0
+pixelwise_weight: 2.0
 root: /home/tnguyen/dataset/FlyingChairs2/train
 n_display_images: 3
 log_image_every_epoch: 1
@@ -30,5 +31,5 @@ static_occ: false
 occ_aware: true
 occlusion_ratio: 0.3
 result_dir: occlusion_mask_logs
-loss_type: vgg
+loss_type: pixel-wise
 adversarial_loss: false

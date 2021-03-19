@@ -1128,14 +1128,19 @@ class TwoStageModelGC(pl.LightningModule):
         self.result_dir = hparams.get('result_dir','')
         self.log_image_every_epoch = hparams.get('log_image_every_epoch',10)
         print('result dir inside inpainting model is {}'.format(self.result_dir))
-        
+        self.using_pretrained_inpainting = hparams.get('using_pretrained_inpainting', True)
         #self.inpainting = InpaintingGConvModel.load_from_checkpoint(inpainting_root).generator
-        if self.inpainting_stage == 'simple': 
-            self.inpainting = InpaintingNet()
-        elif self.inpainting_stage == 'gated': 
-            self.inpainting = InpaintSANet(img_size=self.img_size)
+        if self.using_pretrained_inpainting == True: 
+            print('Using pretrained inpainting model')
+            self.inpainting = InpaintingStageModel.load_from_checkpoint(inpainting_root).generator
         else: 
-            self.inpainting = InpaintSANetOrg(img_size=self.img_size)
+            print('Train inpainting model from scratch')
+            if self.inpainting_stage == 'simple': 
+                self.inpainting = InpaintingNet()
+            elif self.inpainting_stage == 'gated': 
+                self.inpainting = InpaintSANet(img_size=self.img_size)
+            else: 
+                self.inpainting = InpaintSANetOrg(img_size=self.img_size)
         if self.loss_type == 'pixel-wise': 
             self.loss_func = PhotometricLoss()
         elif self.loss_type == 'vgg': 
@@ -1383,4 +1388,7 @@ class TwoStageModelGC(pl.LightningModule):
         tensorboard.add_scalars("losses", {"test_loss": avg_loss}, global_step = self.current_epoch)
     
     def configure_optimizers(self):
-        return Adam(self.parameters(), self.lr)
+        if self.using_pretrained_inpainting: 
+            return Adam(filter(lambda p: p.requires_grad, self.parameters()), self.lr)
+        else: 
+            return Adam(self.parameters(), self.lr)

@@ -2,12 +2,34 @@ import pytorch_lightning as pl
 from models.model import FlowStageModel, InpaintingStageModel, TwoStageModel, TwoStageModelGC, InpaintingGConvModel
 from models.lightning_datamodule import DatasetModule
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.finetuning import BaseFinetuning
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint
 import argparse
 import yaml
 import torch
 import time
+
+class FinetuningInpainting(BaseFinetuning):
+
+    def __init__(self, unfreeze_at_epoch=23): 
+        self._unfreeze_at_epoch = unfreeze_at_epoch
+
+    def freeze_before_training(self, pl_module):
+        # freeze any module you want
+        # Here, we are freezing ``feature_extractor``
+        self.freeze(pl_module.inpainting)
+
+    def finetune_function(self, pl_module, current_epoch, optimizer, optimizer_idx):
+        # When `current_epoch` is 10, feature_extractor will start training.
+        if current_epoch == self._unfreeze_at_epoch:
+            self.unfreeze_and_add_param_group(
+                module=pl_module.inpainting,
+                lr = 0.00001,
+                optimizer=optimizer,
+                train_bn=True,
+            )
+
 
 if __name__ == '__main__':
     pl.seed_everything(42)
@@ -54,6 +76,9 @@ if __name__ == '__main__':
         hparams['inpainting_root'] = args['inpainting_root']
         hparams['smooth1_weight'] = args['smooth1_weight']
         hparams['smooth2_weight'] = args['smooth2_weight']
+        hparams['using_pretrained_inpainting'] = args['using_pretrained_inpainting']
+        if hparams['using_pretrained_inpainting']: 
+            finetuning_callback = FinetuningInpainting()
         hparams['loss_type'] = args['loss_type']
         hparams['pixelwise_weight'] = args['pixelwise_weight']
         if hparams['model'] == 'no_gt_flow': 
@@ -96,10 +121,16 @@ if __name__ == '__main__':
     #specify Trainer and start training
     if not args['find_best_lr']: 
         #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
-        trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization, check_val_every_n_epoch= check_val_every_n_epoch)
+        if hparams['using_pretrained_inpainting']: 
+            trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback, finetuning_callback], automatic_optimization=automatic_optimization, check_val_every_n_epoch= check_val_every_n_epoch)
+        else: 
+            trainer = pl.Trainer(max_epochs=max_epochs, gpus=1, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization, check_val_every_n_epoch= check_val_every_n_epoch)
         trainer.fit(model, datamodule=data_module)
     else: 
-        trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization, check_val_every_n_epoch = check_val_every_n_epoch)
+        if hparams['using_pretrained_inpainting']: 
+            trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback, finetuning_callback], automatic_optimization= automatic_optimization, check_val_every_n_epoch = check_val_every_n_epoch)
+        else: 
+            trainer = pl.Trainer(gpus=1, max_epochs=max_epochs, logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization= automatic_optimization, check_val_every_n_epoch = check_val_every_n_epoch)
         #trainer = pl.Trainer(max_epochs=max_epochs, gpus=-1, accelerator='ddp', logger=tb_logger, callbacks=[checkpoint_callback], automatic_optimization=automatic_optimization)
         lr_finder = trainer.tuner.lr_find(model, datamodule=data_module, early_stop_threshold=None, num_training=100)
         suggested_lr = lr_finder.suggestion()
